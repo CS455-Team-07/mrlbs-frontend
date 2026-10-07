@@ -55,3 +55,7 @@ API clients are not implemented yet. Future frontend REST clients should read th
 ## Current status
 
 Initial scaffold only. The application contains placeholder landing, login, member, and admin pages, navigation, and route layouts. It does not implement authentication, booking workflows, API calls, or other business functionality.
+
+## AI Engineering Log
+
+Material AI-assisted engineering work is documented in [`AI_ENGINEERING_LOG.md`](AI_ENGINEERING_LOG.md). [`AGENTS.md`](AGENTS.md) contains the repository workflow for future AI-assisted development.
