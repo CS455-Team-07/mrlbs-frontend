@@ -12,8 +12,12 @@ describe('application navigation and authentication flow', () => {
     )
 
     expect(
+      screen.getAllByText(/multi-resource lab booking system/i).length,
+    ).toBeGreaterThan(0)
+
+    expect(
       screen.getByRole('heading', {
-        name: /multi-resource lab booking system/i,
+        name: /institutional login/i,
       }),
     ).toBeInTheDocument()
 

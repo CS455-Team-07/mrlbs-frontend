@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, fireEvent, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -8,14 +8,14 @@ import {
 import { AppRoutes } from '../routes/AppRoutes'
 import { clearUserStorage } from '../services/userService'
 
-describe('LoginPage Google Institutional Authentication Flow (FR-1.2 / US-1)', () => {
+describe('LoginPage institutional email authentication flow', () => {
   beforeEach(() => {
     clearUserStorage()
     resetAuthorizedAdmins()
   })
 
   it('allows Ananya to sign in and assigns Admin role when in authorized admin configuration', async () => {
-    setAuthorizedAdmins(['ananya@institution.edu'])
+    setAuthorizedAdmins(['ananya@iitk.ac.in'])
 
     render(
       <MemoryRouter initialEntries={['/login']}>
@@ -23,30 +23,23 @@ describe('LoginPage Google Institutional Authentication Flow (FR-1.2 / US-1)', (
       </MemoryRouter>,
     )
 
-    // Fill form and submit
-    const nameInput = screen.getByLabelText(/authenticated name/i)
-    const emailInput = screen.getByLabelText(/institutional email address/i)
-    const submitBtn = screen.getByRole('button', {
-      name: /sign in with google institutional account/i,
+    const emailInput = screen.getByLabelText(/IITK Email Address/i)
+    const adminButton = screen.getByRole('button', {
+      name: /login as admin/i,
     })
 
-    fireEvent.change(nameInput, { target: { value: 'Ananya Sharma' } })
     fireEvent.change(emailInput, {
-      target: { value: 'ananya@institution.edu' },
+      target: { value: 'ananya@iitk.ac.in' },
     })
-    fireEvent.click(submitBtn)
+    fireEvent.click(adminButton)
 
-    // Verify profile displayed
-    expect(screen.getByText('Authenticated User Profile')).toBeInTheDocument()
-    expect(screen.getAllByText('Ananya Sharma').length).toBeGreaterThan(0)
-    expect(
-      screen.getAllByText('ananya@institution.edu').length,
-    ).toBeGreaterThan(0)
-    expect(screen.getByText(/Role: admin/i)).toBeInTheDocument()
+    expect(screen.getByText(/Welcome, ananya/i)).toBeInTheDocument()
+    expect(screen.getAllByText('ananya@iitk.ac.in').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('admin').length).toBeGreaterThan(0)
   })
 
   it('assigns Member role to non-admin user upon first authentication', async () => {
-    setAuthorizedAdmins(['admin@institution.edu'])
+    setAuthorizedAdmins(['admin@iitk.ac.in'])
 
     render(
       <MemoryRouter initialEntries={['/login']}>
@@ -54,22 +47,18 @@ describe('LoginPage Google Institutional Authentication Flow (FR-1.2 / US-1)', (
       </MemoryRouter>,
     )
 
-    const nameInput = screen.getByLabelText(/authenticated name/i)
-    const emailInput = screen.getByLabelText(/institutional email address/i)
-    const submitBtn = screen.getByRole('button', {
-      name: /sign in with google institutional account/i,
+    const emailInput = screen.getByLabelText(/IITK Email Address/i)
+    const memberButton = screen.getByRole('button', {
+      name: /login as member/i,
     })
 
-    fireEvent.change(nameInput, { target: { value: 'Student User' } })
     fireEvent.change(emailInput, {
-      target: { value: 'student@institution.edu' },
+      target: { value: 'student@iitk.ac.in' },
     })
-    fireEvent.click(submitBtn)
+    fireEvent.click(memberButton)
 
-    expect(screen.getAllByText('Student User').length).toBeGreaterThan(0)
-    expect(
-      screen.getAllByText('student@institution.edu').length,
-    ).toBeGreaterThan(0)
-    expect(screen.getByText(/Role: member/i)).toBeInTheDocument()
+    expect(screen.getByText(/Welcome, student/i)).toBeInTheDocument()
+    expect(screen.getAllByText('student@iitk.ac.in').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('member').length).toBeGreaterThan(0)
   })
 })

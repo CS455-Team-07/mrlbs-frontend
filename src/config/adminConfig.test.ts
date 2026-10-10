@@ -12,21 +12,21 @@ describe('Authorized Administrator Configuration', () => {
   })
 
   it('identifies default authorized administrator identities', () => {
-    expect(isAuthorizedAdmin('ananya@institution.edu')).toBe(true)
-    expect(isAuthorizedAdmin('admin@institution.edu')).toBe(true)
-    expect(isAuthorizedAdmin('ANANYA@INSTITUTION.EDU')).toBe(true)
+    expect(isAuthorizedAdmin('ananya@iitk.ac.in')).toBe(true)
+    expect(isAuthorizedAdmin('admin@iitk.ac.in')).toBe(true)
+    expect(isAuthorizedAdmin('ANANYA@IITK.AC.IN')).toBe(true)
   })
 
   it('returns false for non-administrator identities', () => {
-    expect(isAuthorizedAdmin('student@institution.edu')).toBe(false)
-    expect(isAuthorizedAdmin('rohan.member@institution.edu')).toBe(false)
+    expect(isAuthorizedAdmin('student@iitk.ac.in')).toBe(false)
+    expect(isAuthorizedAdmin('rohan.member@iitk.ac.in')).toBe(false)
     expect(isAuthorizedAdmin('')).toBe(false)
   })
 
   it('allows dynamic configuration of authorized administrators', () => {
-    setAuthorizedAdmins(['custom.admin@institution.edu'])
-    expect(isAuthorizedAdmin('custom.admin@institution.edu')).toBe(true)
-    expect(isAuthorizedAdmin('ananya@institution.edu')).toBe(false)
-    expect(getAuthorizedAdmins()).toEqual(['custom.admin@institution.edu'])
+    setAuthorizedAdmins(['custom.admin@iitk.ac.in'])
+    expect(isAuthorizedAdmin('custom.admin@iitk.ac.in')).toBe(true)
+    expect(isAuthorizedAdmin('ananya@iitk.ac.in')).toBe(false)
+    expect(getAuthorizedAdmins()).toEqual(['custom.admin@iitk.ac.in'])
   })
 })
