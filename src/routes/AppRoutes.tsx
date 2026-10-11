@@ -1,27 +1,28 @@
 import { Route, Routes } from 'react-router-dom'
-import { AdminLayout } from '../layouts/AdminLayout'
+import { AuthProvider } from '../context/AuthContext'
 import { AppLayout } from '../layouts/AppLayout'
-import { MemberLayout } from '../layouts/MemberLayout'
 import { AdminDashboard } from '../pages/AdminDashboard'
 import { LandingPage } from '../pages/LandingPage'
 import { LoginPage } from '../pages/LoginPage'
 import { MemberDashboard } from '../pages/MemberDashboard'
 import { NotFoundPage } from '../pages/NotFoundPage'
+import { ProfilePage } from '../pages/ProfilePage'
 
 export function AppRoutes() {
   return (
-    <Routes>
-      <Route element={<AppLayout />}>
-        <Route index element={<LandingPage />} />
-        <Route path="login" element={<LoginPage />} />
-        <Route element={<MemberLayout />}>
-          <Route path="member" element={<MemberDashboard />} />
-        </Route>
-        <Route element={<AdminLayout />}>
+    <AuthProvider>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route index element={<LandingPage />} />
+
+          <Route path="login" element={<LoginPage />} />
+
+          <Route path="profile" element={<ProfilePage />} />
           <Route path="admin" element={<AdminDashboard />} />
+          <Route path="member" element={<MemberDashboard />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
-        <Route path="*" element={<NotFoundPage />} />
-      </Route>
-    </Routes>
+      </Routes>
+    </AuthProvider>
   )
 }
