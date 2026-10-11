@@ -12,6 +12,7 @@ interface ResourceOption {
 interface TimeSlot { startTime: string; endTime: string }
 interface Availability { bookedSlots: TimeSlot[]; availableSlots: TimeSlot[] }
 interface BookingResult { id: string; creditCost: number; status: string }
+interface MemberBooking extends BookingResult { startTime: string; endTime: string; resourceId: string }
 interface ApiProblem { reasonCode?: string; detail?: string }
 
 export function MemberDashboard() {
@@ -26,6 +27,10 @@ export function MemberDashboard() {
   const [booking, setBooking] = useState<BookingResult | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [memberBookings, setMemberBookings] = useState<MemberBooking[]>([])
+  const [editingBooking, setEditingBooking] = useState<MemberBooking | null>(null)
+  const [editStartTime, setEditStartTime] = useState('')
+  const [editEndTime, setEditEndTime] = useState('')
 
   async function searchResources(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -88,6 +93,46 @@ export function MemberDashboard() {
     } finally { setLoading(false) }
   }
 
+  async function loadBookings() {
+    setLoading(true)
+    setError('')
+    try {
+      const response = await fetch(`${apiClientConfig.baseUrl}/bookings`, { credentials: 'include' })
+      if (!response.ok) throw new Error('Your bookings could not be loaded.')
+      setMemberBookings((await response.json()) as MemberBooking[])
+    } catch (historyError) {
+      setError(historyError instanceof Error ? historyError.message : 'Your bookings could not be loaded.')
+    } finally { setLoading(false) }
+  }
+
+  async function modifyBooking(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!editingBooking) return
+    setLoading(true)
+    setError('')
+    try {
+      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
+      if (!csrfResponse.ok) throw new Error('Could not prepare the secure booking request.')
+      const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
+      const response = await fetch(`${apiClientConfig.baseUrl}/bookings/${editingBooking.id}/time-window`, {
+        method: 'PUT', credentials: 'include',
+        headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
+        body: JSON.stringify({ startTime: editStartTime, endTime: editEndTime }),
+      })
+      if (!response.ok) {
+        const problem = (await response.json().catch(() => null)) as ApiProblem | null
+        if (problem?.reasonCode === 'SLOT_NO_LONGER_AVAILABLE') throw new Error('This slot is no longer available. Your original booking is unchanged.')
+        if (problem?.reasonCode === 'BOOKING_NOT_MODIFIABLE') throw new Error('This booking can no longer be modified.')
+        throw new Error(problem?.detail ?? 'The booking could not be modified.')
+      }
+      const updated = (await response.json()) as MemberBooking
+      setMemberBookings((current) => current.map((bookingItem) => bookingItem.id === updated.id ? updated : bookingItem))
+      setEditingBooking(null)
+    } catch (modificationError) {
+      setError(modificationError instanceof Error ? modificationError.message : 'The booking could not be modified.')
+    } finally { setLoading(false) }
+  }
+
   return (
     <section className="mx-auto w-full max-w-4xl py-8">
       <header className="mb-8">
@@ -135,7 +180,12 @@ export function MemberDashboard() {
         {booking && <p aria-live="polite" className="rounded-lg bg-emerald-50 p-3 text-sm font-medium text-emerald-800" role="status">Booking confirmed. Cost: {booking.creditCost} credits.</p>}
         <div className="flex justify-end border-t border-slate-200 pt-5"><button className="rounded-lg bg-blue-700 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60" disabled={loading} type="submit">{loading ? 'Submitting…' : 'Submit booking'}</button></div>
       </form>}
-      {error && !selectedResource && <p aria-live="polite" className="mt-6 rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800" role="alert">{error}</p>}
+      {error && !selectedResource && !editingBooking && <p aria-live="polite" className="mt-6 rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800" role="alert">{error}</p>}
+      <section aria-label="My bookings" className="mt-8 rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="flex items-center justify-between gap-4"><h2 className="text-xl font-semibold text-slate-900">My bookings</h2><button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60" disabled={loading} onClick={() => void loadBookings()} type="button">Refresh bookings</button></div>
+        {memberBookings.length === 0 ? <p className="mt-3 text-sm text-slate-600">Load your bookings to view or change an upcoming time.</p> : <ul className="mt-4 space-y-3">{memberBookings.map((memberBooking) => <li className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3" key={memberBooking.id}><div><p className="font-medium text-slate-900">{formatSlot(memberBooking)}</p><p className="text-sm text-slate-600">{memberBooking.status} · {memberBooking.creditCost} credits</p></div>{memberBooking.status === 'CONFIRMED' && <button className="rounded-lg border border-blue-300 px-3 py-2 text-sm font-semibold text-blue-800" onClick={() => { setEditingBooking(memberBooking); setEditStartTime(memberBooking.startTime.slice(0, 16)); setEditEndTime(memberBooking.endTime.slice(0, 16)); setError('') }} type="button">Change time</button>}</li>)}</ul>}
+        {editingBooking && <form className="mt-5 space-y-4 border-t border-slate-200 pt-5" onSubmit={modifyBooking}><h3 className="font-semibold text-slate-900">Change booking time</h3><div className="grid gap-4 sm:grid-cols-2"><label className="space-y-2 text-sm font-semibold text-slate-800">New start time<input className={inputClassName} onChange={(event) => setEditStartTime(event.target.value)} required type="datetime-local" value={editStartTime} /></label><label className="space-y-2 text-sm font-semibold text-slate-800">New end time<input className={inputClassName} onChange={(event) => setEditEndTime(event.target.value)} required type="datetime-local" value={editEndTime} /></label></div>{error && <p aria-live="polite" className="rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800" role="alert">{error}</p>}<button className="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60" disabled={loading} type="submit">{loading ? 'Saving…' : 'Save new time'}</button></form>}
+      </section>
     </section>
   )
 }
