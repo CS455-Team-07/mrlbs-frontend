@@ -1,5 +1,5 @@
 /** Central configuration entry point for REST API and authentication requests. */
-const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
+const baseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export const apiClientConfig = {
   baseUrl,

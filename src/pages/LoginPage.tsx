@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
 import { apiClientConfig } from '../services/apiClient'
 
 interface AuthenticatedUser {
@@ -10,7 +9,6 @@ interface AuthenticatedUser {
 }
 
 export function LoginPage() {
-  const { login } = useAuth()
   const [searchParams] = useSearchParams()
   const authenticated = searchParams.has('authenticated')
   const authenticationError = searchParams.get('error')
@@ -32,11 +30,6 @@ export function LoginPage() {
         }
 
         const signedInUser = (await response.json()) as AuthenticatedUser
-        if (!signedInUser.email.trim().toLowerCase().endsWith('@iitk.ac.in')) {
-          throw new Error('Use the Google Workspace account for iitk.ac.in to sign in.')
-        }
-
-        login(signedInUser)
         if (!cancelled) {
           setUser(signedInUser)
           setStatus('')
@@ -56,7 +49,7 @@ export function LoginPage() {
     return () => {
       cancelled = true
     }
-  }, [authenticated, login])
+  }, [authenticated])
 
   const errorMessage =
     authenticationError === 'institutional-domain'
