@@ -133,6 +133,28 @@ export function MemberDashboard() {
     } finally { setLoading(false) }
   }
 
+  async function cancelBooking(memberBooking: MemberBooking) {
+    setLoading(true)
+    setError('')
+    try {
+      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
+      if (!csrfResponse.ok) throw new Error('Could not prepare the secure booking request.')
+      const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
+      const response = await fetch(`${apiClientConfig.baseUrl}/bookings/${memberBooking.id}`, {
+        method: 'DELETE', credentials: 'include', headers: { [csrf.headerName]: csrf.token },
+      })
+      if (!response.ok) {
+        const problem = (await response.json().catch(() => null)) as ApiProblem | null
+        if (problem?.reasonCode === 'BOOKING_NOT_MODIFIABLE') throw new Error('This booking can no longer be cancelled.')
+        throw new Error(problem?.detail ?? 'The booking could not be cancelled.')
+      }
+      const cancelled = (await response.json()) as MemberBooking
+      setMemberBookings((current) => current.map((bookingItem) => bookingItem.id === cancelled.id ? cancelled : bookingItem))
+    } catch (cancellationError) {
+      setError(cancellationError instanceof Error ? cancellationError.message : 'The booking could not be cancelled.')
+    } finally { setLoading(false) }
+  }
+
   return (
     <section className="mx-auto w-full max-w-4xl py-8">
       <header className="mb-8">
@@ -183,7 +205,7 @@ export function MemberDashboard() {
       {error && !selectedResource && !editingBooking && <p aria-live="polite" className="mt-6 rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800" role="alert">{error}</p>}
       <section aria-label="My bookings" className="mt-8 rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex items-center justify-between gap-4"><h2 className="text-xl font-semibold text-slate-900">My bookings</h2><button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60" disabled={loading} onClick={() => void loadBookings()} type="button">Refresh bookings</button></div>
-        {memberBookings.length === 0 ? <p className="mt-3 text-sm text-slate-600">Load your bookings to view or change an upcoming time.</p> : <ul className="mt-4 space-y-3">{memberBookings.map((memberBooking) => <li className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3" key={memberBooking.id}><div><p className="font-medium text-slate-900">{formatSlot(memberBooking)}</p><p className="text-sm text-slate-600">{memberBooking.status} · {memberBooking.creditCost} credits</p></div>{memberBooking.status === 'CONFIRMED' && <button className="rounded-lg border border-blue-300 px-3 py-2 text-sm font-semibold text-blue-800" onClick={() => { setEditingBooking(memberBooking); setEditStartTime(memberBooking.startTime.slice(0, 16)); setEditEndTime(memberBooking.endTime.slice(0, 16)); setError('') }} type="button">Change time</button>}</li>)}</ul>}
+        {memberBookings.length === 0 ? <p className="mt-3 text-sm text-slate-600">Load your bookings to view or change an upcoming time.</p> : <ul className="mt-4 space-y-3">{memberBookings.map((memberBooking) => <li className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3" key={memberBooking.id}><div><p className="font-medium text-slate-900">{formatSlot(memberBooking)}</p><p className="text-sm text-slate-600">{memberBooking.status} · {memberBooking.creditCost} credits</p></div><div className="flex gap-2">{memberBooking.status === 'CONFIRMED' && <button className="rounded-lg border border-blue-300 px-3 py-2 text-sm font-semibold text-blue-800" onClick={() => { setEditingBooking(memberBooking); setEditStartTime(memberBooking.startTime.slice(0, 16)); setEditEndTime(memberBooking.endTime.slice(0, 16)); setError('') }} type="button">Change time</button>}{['CONFIRMED', 'PENDING_APPROVAL'].includes(memberBooking.status) && <button className="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-800 disabled:opacity-60" disabled={loading} onClick={() => void cancelBooking(memberBooking)} type="button">Cancel booking</button>}</div></li>)}</ul>}
         {editingBooking && <form className="mt-5 space-y-4 border-t border-slate-200 pt-5" onSubmit={modifyBooking}><h3 className="font-semibold text-slate-900">Change booking time</h3><div className="grid gap-4 sm:grid-cols-2"><label className="space-y-2 text-sm font-semibold text-slate-800">New start time<input className={inputClassName} onChange={(event) => setEditStartTime(event.target.value)} required type="datetime-local" value={editStartTime} /></label><label className="space-y-2 text-sm font-semibold text-slate-800">New end time<input className={inputClassName} onChange={(event) => setEditEndTime(event.target.value)} required type="datetime-local" value={editEndTime} /></label></div>{error && <p aria-live="polite" className="rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800" role="alert">{error}</p>}<button className="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60" disabled={loading} type="submit">{loading ? 'Saving…' : 'Save new time'}</button></form>}
       </section>
     </section>
