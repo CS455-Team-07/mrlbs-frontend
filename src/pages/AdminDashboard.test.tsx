@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AdminDashboard } from './AdminDashboard'
+import { ResourceOnboardingForm } from './ResourceOnboardingForm'
 
 afterEach(() => {
   cleanup()
@@ -22,7 +22,7 @@ describe('admin resource onboarding form', () => {
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
 
-    render(<AdminDashboard />)
+    render(<ResourceOnboardingForm />)
 
     await user.type(screen.getByLabelText('Resource name'), 'Microscope 4')
     await user.type(screen.getByLabelText('Type or category'), ' Microscope ')
@@ -70,7 +70,7 @@ describe('admin resource onboarding form', () => {
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
 
-    render(<AdminDashboard />)
+    render(<ResourceOnboardingForm />)
 
     await user.type(screen.getByLabelText('Resource name'), 'Seminar Room')
     await user.type(screen.getByLabelText('Type or category'), 'Room')
@@ -97,7 +97,7 @@ describe('admin resource onboarding form', () => {
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
 
-    render(<AdminDashboard />)
+    render(<ResourceOnboardingForm />)
     await user.type(screen.getByLabelText('Resource name'), 'Laser Cutter')
     await user.type(screen.getByLabelText('Type or category'), 'Fabrication')
     await user.type(screen.getByLabelText('Location'), 'Workshop 4')
@@ -122,7 +122,7 @@ describe('admin resource onboarding form', () => {
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
 
-    render(<AdminDashboard />)
+    render(<ResourceOnboardingForm />)
     await user.type(screen.getByLabelText('Resource name'), 'Clean Room')
     await user.type(screen.getByLabelText('Type or category'), 'Lab')
     await user.type(screen.getByLabelText('Location'), 'Research Block')
