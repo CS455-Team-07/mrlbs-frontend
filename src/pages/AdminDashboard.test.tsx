@@ -55,6 +55,7 @@ describe('admin resource onboarding form', () => {
       capacity: 8,
       minimumDurationHours: 1,
       maximumContentionMultiplier: 3,
+      approvalRequired: false,
       rules: ['Book for up to two hours'],
     })
   })
@@ -85,6 +86,7 @@ describe('admin resource onboarding form', () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toMatchObject({
       minimumDurationHours: 1,
       maximumContentionMultiplier: 3,
+      approvalRequired: false,
     })
   })
 
@@ -111,5 +113,24 @@ describe('admin resource onboarding form', () => {
       minimumDurationHours: 1.5,
       maximumContentionMultiplier: 2.5,
     })
+  })
+
+  it('persists approval-required booking configuration', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'csrf', headerName: 'X-CSRF-TOKEN' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Clean Room' }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<AdminDashboard />)
+    await user.type(screen.getByLabelText('Resource name'), 'Clean Room')
+    await user.type(screen.getByLabelText('Type or category'), 'Lab')
+    await user.type(screen.getByLabelText('Location'), 'Research Block')
+    await user.type(screen.getByLabelText('Rule 1'), 'Protective clothing required')
+    await user.click(screen.getByRole('checkbox', { name: /Require Admin approval for bookings/ }))
+    await user.click(screen.getByRole('button', { name: 'Save resource' }))
+
+    await screen.findByRole('status')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string).approvalRequired).toBe(true)
   })
 })
