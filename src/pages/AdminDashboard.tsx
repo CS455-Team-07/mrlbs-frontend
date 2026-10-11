@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import type { Resource } from '../types/Resource'
+import { ResourceOnboardingForm } from './ResourceOnboardingForm'
 import { deactivateResource } from '../services/resourceService'
 import {
   getInactiveResources,
@@ -466,6 +467,7 @@ export function AdminDashboard() {
           </div>
         )}
       </div>
+      <ResourceOnboardingForm />
     </section>
   )
 }

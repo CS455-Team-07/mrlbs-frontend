@@ -119,3 +119,32 @@ Accepted
 
 **Reason:**\
 Fully implements the profile creation requirement from FR-1.2 / US-1 with proper form validation, image upload, persistent storage, and profile display on dashboards. Builds cleanly with zero errors.
+
+#### 2026-10-07 — Admin resource onboarding
+
+**Task / Context:**\
+Implement the frontend for FR-2.1 / US-2, allowing an Admin to submit a new lab resource and its initial booking rules.
+
+**Prompt:**\
+Exact user prompt: “implement this jira ticket” followed by the ticket titled “Admin onboards a new resource (name, type, location, capacity, initial rules)” and its description, acceptance criteria, and traceability to FR-2.1 / US-2.
+
+**AI Output:**\
+Implemented a separate resource onboarding form that submits to the backend, supports optional capacity and multiple initial rules, and reports success and failures.
+
+**Student/Team Evaluation:**\
+Pending human review.
+
+**Errors / Risks / Hallucinations:**\
+End-to-end use depends on the backend authentication integration supplying an Admin authority and a valid API session.
+
+**Changes Made After Evaluation:**\
+The onboarding form is kept alongside the resource management dashboard.
+
+**Final Accepted Artifact:**\
+Proposed frontend form in `src/pages/ResourceOnboardingForm.tsx`.
+
+**Decision:**\
+Modified; implementation prepared for human review.
+
+**Reason:**\
+The requested onboarding form remains available alongside the merged resource management workflows.
