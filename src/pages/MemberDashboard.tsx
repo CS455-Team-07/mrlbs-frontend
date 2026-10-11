@@ -1,96 +1,147 @@
 import { useState, type FormEvent } from 'react'
 import { apiClientConfig } from '../services/apiClient'
 
-interface BookingResult {
+interface ResourceOption {
   id: string
-  creditCost: number
-  status: string
+  name: string
+  type: string
+  location: string
+  capacity: number | null
+  available: boolean
 }
-
-interface ApiProblem {
-  reasonCode?: string
-  detail?: string
-}
+interface TimeSlot { startTime: string; endTime: string }
+interface Availability { bookedSlots: TimeSlot[]; availableSlots: TimeSlot[] }
+interface BookingResult { id: string; creditCost: number; status: string }
+interface ApiProblem { reasonCode?: string; detail?: string }
 
 export function MemberDashboard() {
-  const [resourceId, setResourceId] = useState('')
+  const [type, setType] = useState('')
+  const [date, setDate] = useState('')
+  const [capacity, setCapacity] = useState('')
+  const [resources, setResources] = useState<ResourceOption[]>([])
+  const [selectedResource, setSelectedResource] = useState<ResourceOption | null>(null)
+  const [availability, setAvailability] = useState<Availability | null>(null)
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
   const [booking, setBooking] = useState<BookingResult | null>(null)
   const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  async function searchResources(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+    setSelectedResource(null)
+    setAvailability(null)
+    const params = new URLSearchParams()
+    if (type.trim()) params.set('type', type.trim())
+    if (date) params.set('date', date)
+    if (capacity) params.set('capacity', capacity)
+    try {
+      const response = await fetch(`${apiClientConfig.baseUrl}/resources/search?${params}`, { credentials: 'include' })
+      if (!response.ok) throw new Error('Resources could not be loaded.')
+      setResources((await response.json()) as ResourceOption[])
+    } catch (searchError) {
+      setError(searchError instanceof Error ? searchError.message : 'Resources could not be loaded.')
+    } finally { setLoading(false) }
+  }
+
+  async function chooseResource(resource: ResourceOption) {
+    setSelectedResource(resource)
+    setAvailability(null)
+    setStartTime('')
+    setEndTime('')
+    setError('')
+    try {
+      const response = await fetch(`${apiClientConfig.baseUrl}/resources/${resource.id}/availability?date=${date}`, { credentials: 'include' })
+      if (!response.ok) throw new Error('Availability could not be loaded.')
+      setAvailability((await response.json()) as Availability)
+    } catch (availabilityError) {
+      setError(availabilityError instanceof Error ? availabilityError.message : 'Availability could not be loaded.')
+    }
+  }
 
   async function submitBooking(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSubmitting(true)
+    if (!selectedResource) return
+    setLoading(true)
     setBooking(null)
     setError('')
     try {
-      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, {
-        credentials: 'include',
-      })
+      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
       if (!csrfResponse.ok) throw new Error('Could not prepare the secure booking request.')
       const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
       const response = await fetch(`${apiClientConfig.baseUrl}/bookings`, {
-        method: 'POST',
-        credentials: 'include',
+        method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
-        body: JSON.stringify({
-          resourceId,
-          startTime,
-          endTime,
-        }),
+        body: JSON.stringify({ resourceId: selectedResource.id, startTime, endTime }),
       })
       if (!response.ok) {
         const problem = (await response.json().catch(() => null)) as ApiProblem | null
-        if (problem?.reasonCode === 'INSUFFICIENT_CREDITS') {
-          throw new Error('You do not have enough credits for this booking.')
-        }
-        if (problem?.reasonCode === 'SLOT_NO_LONGER_AVAILABLE') {
-          throw new Error('This slot is no longer available. Choose another time.')
-        }
+        if (problem?.reasonCode === 'INSUFFICIENT_CREDITS') throw new Error('You do not have enough credits for this booking.')
+        if (problem?.reasonCode === 'SLOT_NO_LONGER_AVAILABLE') throw new Error('This slot is no longer available. Choose another time.')
         throw new Error(problem?.detail ?? 'The booking could not be submitted.')
       }
       setBooking((await response.json()) as BookingResult)
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'The booking could not be submitted.')
-    } finally {
-      setSubmitting(false)
-    }
+    } finally { setLoading(false) }
   }
 
   return (
     <section className="mx-auto w-full max-w-4xl py-8">
       <header className="mb-8">
         <p className="text-sm font-semibold text-blue-700">Member area</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Book a resource</h1>
-        <p className="mt-3 max-w-2xl text-slate-600">Submit a time window for a resource. The server validates the request and checks your available credits.</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Find and book a resource</h1>
+        <p className="mt-3 max-w-2xl text-slate-600">Search by resource type, date, and capacity. Review booked and open times before submitting a booking.</p>
       </header>
-      <form className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8" onSubmit={submitBooking}>
-        <label className="block space-y-2 text-sm font-semibold text-slate-800" htmlFor="booking-resource">
-          Resource ID
-          <input className={inputClassName} id="booking-resource" onChange={(event) => setResourceId(event.target.value)} required value={resourceId} />
+      <form className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:grid-cols-4" onSubmit={searchResources}>
+        <label className="space-y-2 text-sm font-semibold text-slate-800">Type
+          <input className={inputClassName} onChange={(event) => setType(event.target.value)} value={type} />
         </label>
+        <label className="space-y-2 text-sm font-semibold text-slate-800">Date
+          <input className={inputClassName} onChange={(event) => setDate(event.target.value)} required type="date" value={date} />
+        </label>
+        <label className="space-y-2 text-sm font-semibold text-slate-800">Minimum capacity
+          <input className={inputClassName} min="1" onChange={(event) => setCapacity(event.target.value)} type="number" value={capacity} />
+        </label>
+        <button className="self-end rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60" disabled={loading} type="submit">Search resources</button>
+      </form>
+
+      {resources.length > 0 && <section aria-label="Search results" className="mt-6 space-y-3">
+        <h2 className="text-lg font-semibold text-slate-900">Matching resources</h2>
+        {resources.map((resource) => <article className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4" key={resource.id}>
+          <div><h3 className="font-semibold text-slate-900">{resource.name}</h3><p className="text-sm text-slate-600">{resource.type} · {resource.location} · {resource.available ? 'Available' : 'Booked'}</p></div>
+          <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700" onClick={() => void chooseResource(resource)} type="button">View availability</button>
+        </article>)}
+      </section>}
+
+      {selectedResource && availability && <section aria-label="Resource availability" className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 className="text-xl font-semibold text-slate-900">{selectedResource.name} availability</h2>
+        <h3 className="mt-4 text-sm font-semibold text-slate-800">Existing bookings</h3>
+        {availability.bookedSlots.length ? <ul className="mt-2 list-disc pl-5 text-sm text-slate-600">{availability.bookedSlots.map((slot) => <li key={`${slot.startTime}-${slot.endTime}`}>{formatSlot(slot)}</li>)}</ul> : <p className="mt-2 text-sm text-slate-600">No bookings on this date.</p>}
+        <h3 className="mt-4 text-sm font-semibold text-slate-800">Open slots</h3>
+        {availability.availableSlots.length ? <div className="mt-2 flex flex-wrap gap-2">{availability.availableSlots.map((slot) => <button className="rounded-lg border border-emerald-300 px-3 py-2 text-sm text-emerald-800" key={`${slot.startTime}-${slot.endTime}`} onClick={() => { setStartTime(slot.startTime.slice(0, 16)); setEndTime(slot.endTime.slice(0, 16)) }} type="button">{formatSlot(slot)} · use</button>)}</div> : <p className="mt-2 text-sm text-slate-600">No open slots on this date.</p>}
+      </section>}
+      {error && selectedResource && !availability && <p aria-live="polite" className="mt-6 rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800" role="alert">{error}</p>}
+
+      {selectedResource && availability && <form className="mt-6 space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" onSubmit={submitBooking}>
+        <h2 className="text-xl font-semibold text-slate-900">Submit booking</h2>
         <div className="grid gap-5 sm:grid-cols-2">
-          <label className="block space-y-2 text-sm font-semibold text-slate-800" htmlFor="booking-start">
-            Start time
-            <input className={inputClassName} id="booking-start" onChange={(event) => setStartTime(event.target.value)} required type="datetime-local" value={startTime} />
-          </label>
-          <label className="block space-y-2 text-sm font-semibold text-slate-800" htmlFor="booking-end">
-            End time
-            <input className={inputClassName} id="booking-end" onChange={(event) => setEndTime(event.target.value)} required type="datetime-local" value={endTime} />
-          </label>
+          <label className="block space-y-2 text-sm font-semibold text-slate-800">Start time<input className={inputClassName} onChange={(event) => setStartTime(event.target.value)} required type="datetime-local" value={startTime} /></label>
+          <label className="block space-y-2 text-sm font-semibold text-slate-800">End time<input className={inputClassName} onChange={(event) => setEndTime(event.target.value)} required type="datetime-local" value={endTime} /></label>
         </div>
         {error && <p aria-live="polite" className="rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800" role="alert">{error}</p>}
         {booking && <p aria-live="polite" className="rounded-lg bg-emerald-50 p-3 text-sm font-medium text-emerald-800" role="status">Booking confirmed. Cost: {booking.creditCost} credits.</p>}
-        <div className="flex justify-end border-t border-slate-200 pt-5">
-          <button className="rounded-lg bg-blue-700 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60" disabled={submitting} type="submit">
-            {submitting ? 'Submitting booking…' : 'Submit booking'}
-          </button>
-        </div>
-      </form>
+        <div className="flex justify-end border-t border-slate-200 pt-5"><button className="rounded-lg bg-blue-700 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60" disabled={loading} type="submit">{loading ? 'Submitting…' : 'Submit booking'}</button></div>
+      </form>}
+      {error && !selectedResource && <p aria-live="polite" className="mt-6 rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800" role="alert">{error}</p>}
     </section>
   )
+}
+
+function formatSlot(slot: TimeSlot) {
+  return `${slot.startTime.replace('T', ' ').slice(0, 16)} to ${slot.endTime.replace('T', ' ').slice(0, 16)}`
 }
 
 const inputClassName = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 focus:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-100'

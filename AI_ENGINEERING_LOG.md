@@ -128,3 +128,22 @@ The sign-in UI and callback handling were implemented. Live provider credentials
 **Decision:** Modified.
 
 **Reason:** The UI now makes a real authenticated booking request and reports the backend's stable business reason in clear language.
+# 2026-10-11 — BOOK-81 resource discovery and availability UI
+
+**Task/context:** Add Member-facing filters, search results, booked/open interval display, and slot selection.
+
+**Prompt:** Complete the assigned Jira backlog as individually stacked PRs with extensive tests; BOOK-81 requires search and availability for the selected date.
+
+**AI output/response:** Added type/date/capacity search controls, result list with date availability, availability view for a selected result, and buttons that prefill a booking time window from an open interval.
+
+**Student/team evaluation:** Pending human review. The UI renders the date interval provided by the backend, including unbooked gaps across the full calendar day.
+
+**Errors, risks, or hallucinations identified:** The backend has no resource-hours configuration, so availability is displayed across the selected calendar day.
+
+**Changes made after evaluating the AI output:** Added component tests verifying filter query, chosen resource/date, rendering of booked/open intervals, slot prefill, and final authenticated booking payload.
+
+**Final accepted artifact/output:** Proposed BOOK-81 Member discovery/availability experience and tests. Human acceptance is pending.
+
+**Decision:** Modified.
+
+**Reason:** The search result flows directly into persisted availability and lets a Member pick an available interval.
