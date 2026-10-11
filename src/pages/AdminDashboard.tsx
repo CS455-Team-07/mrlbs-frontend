@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import type { Resource } from '../types/Resource'
 import { deactivateResource } from '../services/resourceService'
@@ -33,7 +32,6 @@ const makeDraft = (resource: Resource): ResourceDraft => ({
 })
 export function AdminDashboard() {
   const { user } = useAuth()
-  const navigate = useNavigate()
   const [resources, setResources] = useState<Resource[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')

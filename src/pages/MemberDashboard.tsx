@@ -1,6 +1,5 @@
 
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 import ResourceSearch from '../components/ResourceSearch'
@@ -34,7 +33,6 @@ const categories = [
 
 export function MemberDashboard() {
   const { user } = useAuth()
-  const navigate = useNavigate()
   const [selectedCategory, setSelectedCategory] = useState('')
 
   if (!user) {
