@@ -147,3 +147,22 @@ The sign-in UI and callback handling were implemented. Live provider credentials
 **Decision:** Modified.
 
 **Reason:** The search result flows directly into persisted availability and lets a Member pick an available interval.
+# 2026-10-11 — BOOK-84 Admin-configured approval requirement
+
+**Task/context:** Let Admins mark new resources as requiring human review and send that option to the resource API.
+
+**Prompt:** Complete assigned tickets through Sprint 3 as stacked PRs with extensive tests; BOOK-84 places approval-required bookings in a pending workflow.
+
+**AI output/response:** Added an Admin checkbox for approval-required resources and sent the value in the resource creation request.
+
+**Student/team evaluation:** Pending human review. Admin approval decisions are outside this ticket's scope.
+
+**Errors, risks, or hallucinations identified:** The backend determines whether to create PENDING_APPROVAL; client state is only configuration input.
+
+**Changes made after evaluating the AI output:** Added payload tests for default-off and explicitly enabled approval policy.
+
+**Final accepted artifact/output:** Proposed BOOK-84 resource configuration control and tests. Human acceptance is pending.
+
+**Decision:** Modified.
+
+**Reason:** The Admin can now persist the policy that drives the backend pending state.
