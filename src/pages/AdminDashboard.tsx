@@ -27,9 +27,23 @@ export function AdminDashboard() {
     setCreatedResource(null)
 
     try {
+      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, {
+        credentials: 'include',
+      })
+      if (!csrfResponse.ok) {
+        throw new Error('Could not prepare the secure resource request.')
+      }
+      const csrf = (await csrfResponse.json()) as {
+        token: string
+        headerName: string
+      }
+
       const response = await fetch(`${apiClientConfig.baseUrl}/resources`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          [csrf.headerName]: csrf.token,
+        },
         credentials: 'include',
         body: JSON.stringify({
           name,

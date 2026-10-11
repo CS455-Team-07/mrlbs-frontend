@@ -54,10 +54,39 @@ End-to-end use depends on the backend authentication integration supplying an Ad
 No human evaluation has been provided yet.
 
 **Final Accepted Artifact:**\
-Proposed frontend form in `src/pages/AdminDashboard.tsx` and expanded `src/types/Resource.ts`. Human acceptance is pending.
+Proposed frontend form in `src/pages/AdminDashboard.tsx` and expanded `src/types/Resource.ts`, with tests in `src/pages/AdminDashboard.test.tsx`. Human acceptance is pending.
 
 **Decision:**\
 Modified; implementation prepared for human review.
 
 **Reason:**\
 The requested form was implemented. Sign-in and role provisioning are outside the existing frontend scaffold.
+
+#### 2026-10-11 — BOOK-10 institutional Google OIDC sign-in
+
+**Task / Context:**\
+Implement the frontend sign-in experience for FR-1.1 / US-1 using Google OIDC and the configured institutional domain.
+
+**Prompt:**\
+The user requested implementation of the institutional Google sign-in ticket, specified the initial domain `iitk.ac.in`, and authorized consulting `Deliverable_1_Final.pdf` for requirements context. Deliverable 1 identifies institutional authentication as BOOK-10.
+
+**AI Output:**\
+Replaced the login placeholder with a Google sign-in link, displays the authenticated account after the backend callback, surfaces domain/authentication failures, and sends the CSRF token when posting a new resource. Updated frontend API/auth URL configuration. This is a summary of the generated work, not a verbatim transcript.
+
+**Student/Team Evaluation:**\
+Pending human review. The frontend must point to the backend and the backend must have valid Google OAuth client credentials configured for live sign-in.
+
+**Errors / Risks / Hallucinations:**\
+No real Google client credentials are available in the repository, so a live provider round-trip cannot be performed here. Backend authentication is authoritative; frontend text does not enforce domain access.
+
+**Changes Made After Evaluation:**\
+No human evaluation has been provided yet.
+
+**Final Accepted Artifact:**\
+Proposed frontend sign-in in `src/pages/LoginPage.tsx`, URL configuration in `src/services/apiClient.ts` and `.env.example`, plus the Admin request's CSRF header. Tests are in `src/pages/LoginPage.test.tsx` and `src/pages/AdminDashboard.test.tsx`. Human acceptance is pending.
+
+**Decision:**\
+Modified; implementation prepared for human review.
+
+**Reason:**\
+The sign-in UI and callback handling were implemented. Live provider credentials must be configured by the deployment owner.

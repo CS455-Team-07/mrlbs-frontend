@@ -11,15 +11,15 @@ export function LandingPage() {
           A simple starting point for shared lab resources.
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-8 text-slate-600">
-          This frontend scaffold provides a place to build member and
-          administrator experiences for MRLBS.
+          Sign in with your institutional Google Workspace account to access
+          shared lab resources.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
             to="/login"
             className="rounded-lg bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-800"
           >
-            Open login placeholder
+            Sign in with Google
           </Link>
           <Link
             to="/member"
