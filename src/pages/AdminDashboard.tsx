@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import type { Resource } from '../types/Resource'
-
+import { deactivateResource } from '../services/resourceService'
+import {
+  getInactiveResources,
+  restoreResource,
+} from '../services/resourceService'
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8081'
-
+  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8081/api'
 type ResourceDraft = {
   name: string
   type: string
@@ -17,7 +20,6 @@ type ResourceDraft = {
   bufferTimeMinutes: number
   maxBookingsPerMember: number
 }
-
 const makeDraft = (resource: Resource): ResourceDraft => ({
   name: resource.name ?? '',
   type: resource.type ?? '',
@@ -29,7 +31,6 @@ const makeDraft = (resource: Resource): ResourceDraft => ({
   bufferTimeMinutes: resource.bookingRule?.bufferTimeMinutes ?? 15,
   maxBookingsPerMember: resource.bookingRule?.maxBookingsPerMember ?? 3,
 })
-
 export function AdminDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -40,16 +41,18 @@ export function AdminDashboard() {
   const [drafts, setDrafts] = useState<Record<number, ResourceDraft>>({})
   const [savingId, setSavingId] = useState<number | null>(null)
   const [saveError, setSaveError] = useState('')
-
+  const [deactivatingId, setDeactivatingId] = useState<number | null>(null)
+  const [deactivateError, setDeactivateError] = useState('')
+  const [inactiveResources, setInactiveResources] = useState<Resource[]>([])
+  const [restoringId, setRestoringId] = useState<number | null>(null)
+  const [restoreError, setRestoreError] = useState('')
   const fetchResources = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/api/resources`)
-
+      const response = await fetch(`${API_BASE_URL}/resources`)
       if (!response.ok) {
         throw new Error('Failed to load resources')
       }
-
       const data = (await response.json()) as Resource[]
       setResources(data)
       setDrafts(
@@ -66,6 +69,7 @@ export function AdminDashboard() {
 
   useEffect(() => {
     fetchResources()
+    fetchInactiveResources()
   }, [])
 
   const updateDraft = (resourceId: number, field: keyof ResourceDraft, value: string | number) => {
@@ -87,16 +91,13 @@ export function AdminDashboard() {
       },
     }))
   }
-
   const saveResource = async (resource: Resource) => {
     const draft = drafts[resource.id]
     if (!draft) return
-
     try {
       setSavingId(resource.id)
       setSaveError('')
-
-      const response = await fetch(`${API_BASE_URL}/api/resources/${resource.id}`, {
+      const response = await fetch(`${API_BASE_URL}/resources/${resource.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -115,11 +116,9 @@ export function AdminDashboard() {
           },
         }),
       })
-
       if (!response.ok) {
         throw new Error('Unable to save resource')
       }
-
       const updated = (await response.json()) as Resource
       setResources((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
@@ -137,6 +136,60 @@ export function AdminDashboard() {
     }
   }
 
+  const fetchInactiveResources = async () => {
+    try {
+      const data = await getInactiveResources()
+      setInactiveResources(data)
+      setRestoreError('')
+    } catch (error) {
+      console.error('Failed to load inactive resources:', error)
+      setRestoreError('Unable to load inactive resources.')
+    }
+  }
+
+  const handleRestore = async (resourceId: number) => {
+    try {
+      setRestoringId(resourceId)
+      setRestoreError('')
+
+      await restoreResource(resourceId)
+      await fetchResources()
+      await fetchInactiveResources()
+    } catch (error) {
+      console.error(error)
+      setRestoreError('Unable to restore this resource.')
+    } finally {
+      setRestoringId(null)
+    }
+  }
+  const handleDeactivate = async (resource: Resource) => {
+    const confirmed = window.confirm(
+      `Deactivate "${resource.name}"? It will no longer appear in active resource listings.`,
+    )
+    if (!confirmed) return
+
+    try {
+      setDeactivatingId(resource.id)
+      setDeactivateError('')
+      await deactivateResource(resource.id)
+      await fetchResources()
+      await fetchInactiveResources()
+
+      setResources((current) => current.filter((item) => item.id !== resource.id))
+      setDrafts((current) => {
+        const updated = { ...current }
+        delete updated[resource.id]
+        return updated
+      })
+      if (editingId === resource.id) setEditingId(null)
+    } catch (err) {
+      console.error(err)
+      setDeactivateError(`Could not deactivate "${resource.name}". Please try again.`)
+    } finally {
+      setDeactivatingId(null)
+    }
+  }
+
   if (!user) {
     return (
       <section className="my-auto rounded-2xl border border-slate-200 bg-white p-8 shadow-sm text-center">
@@ -144,95 +197,8 @@ export function AdminDashboard() {
       </section>
     )
   }
-
   return (
     <section className="my-auto mx-auto w-full max-w-5xl py-6 space-y-6">
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <div className="flex items-start gap-6">
-          <div className="shrink-0">
-            {user.avatarUrl ? (
-              <img
-                src={user.avatarUrl}
-                alt={`${user.name}'s avatar`}
-                className="h-24 w-24 rounded-full object-cover border-2 border-purple-200 shadow-sm"
-              />
-            ) : (
-              <div className="h-24 w-24 rounded-full bg-gradient-to-br from-purple-100 to-purple-200 flex items-center justify-center border-2 border-purple-200">
-                <span className="text-3xl font-bold text-purple-700">
-                  {user.name.charAt(0).toUpperCase()}
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex-1">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-slate-900">
-                  {user.name}
-                </h1>
-                <p className="text-sm text-slate-500 mt-0.5">{user.email}</p>
-              </div>
-              <span className="rounded-full bg-purple-100 text-purple-800 border border-purple-300 px-3 py-1 text-xs font-bold uppercase tracking-wider">
-                {user.role} role
-              </span>
-            </div>
-
-            <dl className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
-              {user.institutionalId && (
-                <div>
-                  <dt className="font-medium text-slate-500">
-                    Institutional ID
-                  </dt>
-                  <dd className="mt-0.5 font-semibold text-slate-900">
-                    {user.institutionalId}
-                  </dd>
-                </div>
-              )}
-              {user.department && (
-                <div>
-                  <dt className="font-medium text-slate-500">Department</dt>
-                  <dd className="mt-0.5 font-semibold text-slate-900">
-                    {user.department}
-                  </dd>
-                </div>
-              )}
-              <div>
-                <dt className="font-medium text-slate-500">User ID</dt>
-                <dd className="mt-0.5 font-mono text-xs text-slate-600">
-                  {user.id}
-                </dd>
-              </div>
-              {user.createdAt && (
-                <div>
-                  <dt className="font-medium text-slate-500">Member Since</dt>
-                  <dd className="mt-0.5 font-semibold text-slate-900">
-                    {new Date(user.createdAt).toLocaleDateString()}
-                  </dd>
-                </div>
-              )}
-            </dl>
-
-            {user.bio && (
-              <div className="mt-4 rounded-lg bg-slate-50 border border-slate-100 p-3">
-                <p className="text-xs font-medium text-slate-500 mb-1">Bio</p>
-                <p className="text-sm text-slate-700">{user.bio}</p>
-              </div>
-            )}
-
-            <div className="mt-5">
-              <button
-                type="button"
-                onClick={() => navigate('/profile')}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-              >
-                Edit Profile
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <p className="text-sm font-semibold text-purple-700">Admin area</p>
         <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">
@@ -241,8 +207,12 @@ export function AdminDashboard() {
         <p className="mt-3 text-slate-600">
           Welcome, {user.name}! Review and configure the lab resources currently available in the system.
         </p>
-
         <div className="mt-6">
+          {deactivateError && (
+            <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {deactivateError}
+            </p>
+          )}
           {loading ? (
             <p className="text-sm text-slate-500">Loading configured resources...</p>
           ) : error ? (
@@ -258,7 +228,6 @@ export function AdminDashboard() {
               {resources.map((resource) => {
                 const draft = drafts[resource.id]
                 const isEditing = editingId === resource.id
-
                 return (
                   <div
                     key={resource.id}
@@ -277,7 +246,6 @@ export function AdminDashboard() {
                         #{resource.id}
                       </span>
                     </div>
-
                     {!isEditing ? (
                       <>
                         <dl className="mt-4 space-y-2 text-sm text-slate-600">
@@ -302,21 +270,30 @@ export function AdminDashboard() {
                             </div>
                           )}
                         </dl>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingId(resource.id)
-                            setDrafts((current) => ({
-                              ...current,
-                              [resource.id]: makeDraft(resource),
-                            }))
-                            setSaveError('')
-                          }}
-                          className="mt-4 rounded-xl bg-purple-700 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-800"
-                        >
-                          Configure
-                        </button>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingId(resource.id)
+                              setDrafts((current) => ({
+                                ...current,
+                                [resource.id]: makeDraft(resource),
+                              }))
+                              setSaveError('')
+                            }}
+                            className="rounded-xl bg-purple-700 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-800"
+                          >
+                            Configure
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeactivate(resource)}
+                            disabled={deactivatingId === resource.id}
+                            className="rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                          >
+                            {deactivatingId === resource.id ? 'Deactivating...' : 'Deactivate'}
+                          </button>
+                        </div>
                       </>
                     ) : (
                       <div className="mt-4 space-y-3 rounded-xl border border-purple-200 bg-white p-4">
@@ -329,7 +306,6 @@ export function AdminDashboard() {
                               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             />
                           </label>
-
                           <label className="text-sm text-slate-700">
                             Type
                             <input
@@ -338,7 +314,6 @@ export function AdminDashboard() {
                               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             />
                           </label>
-
                           <label className="text-sm text-slate-700">
                             Location
                             <input
@@ -347,7 +322,6 @@ export function AdminDashboard() {
                               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             />
                           </label>
-
                           <label className="text-sm text-slate-700">
                             Capacity
                             <input
@@ -358,7 +332,6 @@ export function AdminDashboard() {
                               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             />
                           </label>
-
                           <label className="text-sm text-slate-700">
                             Booking policy
                             <select
@@ -370,7 +343,6 @@ export function AdminDashboard() {
                               <option value="APPROVAL_REQUIRED">Approval required</option>
                             </select>
                           </label>
-
                           <label className="text-sm text-slate-700">
                             Min duration
                             <input
@@ -381,7 +353,6 @@ export function AdminDashboard() {
                               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             />
                           </label>
-
                           <label className="text-sm text-slate-700">
                             Max duration
                             <input
@@ -392,7 +363,6 @@ export function AdminDashboard() {
                               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             />
                           </label>
-
                           <label className="text-sm text-slate-700">
                             Buffer time
                             <input
@@ -403,7 +373,6 @@ export function AdminDashboard() {
                               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             />
                           </label>
-
                           <label className="text-sm text-slate-700 sm:col-span-2">
                             Max bookings per member
                             <input
@@ -415,13 +384,11 @@ export function AdminDashboard() {
                             />
                           </label>
                         </div>
-
                         {saveError && (
                           <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                             {saveError}
                           </p>
                         )}
-
                         <div className="flex gap-2">
                           <button
                             type="button"
@@ -450,6 +417,56 @@ export function AdminDashboard() {
             </div>
           )}
         </div>
+      </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-semibold text-slate-900">
+          Inactive Resources
+        </h2>
+
+        <p className="mt-1 text-sm text-slate-500">
+          Restore resources that were previously deactivated.
+        </p>
+
+        {restoreError && (
+          <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+            {restoreError}
+          </p>
+        )}
+
+        {inactiveResources.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">
+            No inactive resources found.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {inactiveResources.map((resource) => (
+              <div
+                key={resource.id}
+                className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4"
+              >
+                <div>
+                  <p className="font-semibold text-slate-900">
+                    {resource.name}
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    {resource.type ?? 'Unspecified type'}
+                    {' · '}
+                    Capacity: {resource.capacity ?? 'N/A'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleRestore(resource.id)}
+                  disabled={restoringId === resource.id}
+                  className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-60"
+                >
+                  {restoringId === resource.id ? 'Restoring...' : 'Restore'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )

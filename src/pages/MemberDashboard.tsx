@@ -1,120 +1,94 @@
+
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+
+import ResourceSearch from '../components/ResourceSearch'
+
+const categories = [
+  {
+    title: 'Computer Labs',
+    description: 'Computing spaces and laboratory workstations.',
+    type: 'Laboratory',
+    symbol: '💻',
+  },
+  {
+    title: 'Lecture Halls',
+    description: 'Teaching spaces and lecture rooms.',
+    type: 'Lecture Hall',
+    symbol: '🎓',
+  },
+  {
+    title: 'GPU Resources',
+    description: 'High-performance computing resources.',
+    type: 'GPU',
+    symbol: '⚡',
+  },
+  {
+    title: 'Lab Equipment',
+    description: 'Equipment available for laboratory use.',
+    type: 'Equipment',
+    symbol: '🔬',
+  },
+]
 
 export function MemberDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [selectedCategory, setSelectedCategory] = useState('')
 
   if (!user) {
     return (
-      <section className="my-auto rounded-2xl border border-slate-200 bg-white p-8 shadow-sm text-center">
-        <p className="text-slate-600">Please sign in to access the dashboard.</p>
+      <section className="mx-auto w-full max-w-3xl py-6">
+        <p className="text-slate-600">
+          Please sign in to access the member dashboard.
+        </p>
       </section>
     )
   }
 
   return (
-    <section className="my-auto mx-auto w-full max-w-3xl py-6 space-y-6">
-      {/* Profile Card */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <div className="flex items-start gap-6">
-          {/* Avatar */}
-          <div className="shrink-0">
-            {user.avatarUrl ? (
-              <img
-                src={user.avatarUrl}
-                alt={`${user.name}'s avatar`}
-                className="h-24 w-24 rounded-full object-cover border-2 border-blue-200 shadow-sm"
-              />
-            ) : (
-              <div className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center border-2 border-blue-200">
-                <span className="text-3xl font-bold text-blue-700">
-                  {user.name.charAt(0).toUpperCase()}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Info */}
-          <div className="flex-1">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-slate-900">
-                  {user.name}
-                </h1>
-                <p className="text-sm text-slate-500 mt-0.5">{user.email}</p>
-              </div>
-              <span className="rounded-full bg-blue-100 text-blue-800 border border-blue-300 px-3 py-1 text-xs font-bold uppercase tracking-wider">
-                {user.role} role
-              </span>
-            </div>
-
-            {/* Profile details */}
-            <dl className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
-              {user.institutionalId && (
-                <div>
-                  <dt className="font-medium text-slate-500">
-                    Institutional ID
-                  </dt>
-                  <dd className="mt-0.5 font-semibold text-slate-900">
-                    {user.institutionalId}
-                  </dd>
-                </div>
-              )}
-              {user.department && (
-                <div>
-                  <dt className="font-medium text-slate-500">Department</dt>
-                  <dd className="mt-0.5 font-semibold text-slate-900">
-                    {user.department}
-                  </dd>
-                </div>
-              )}
-              <div>
-                <dt className="font-medium text-slate-500">User ID</dt>
-                <dd className="mt-0.5 font-mono text-xs text-slate-600">
-                  {user.id}
-                </dd>
-              </div>
-              {user.createdAt && (
-                <div>
-                  <dt className="font-medium text-slate-500">Member Since</dt>
-                  <dd className="mt-0.5 font-semibold text-slate-900">
-                    {new Date(user.createdAt).toLocaleDateString()}
-                  </dd>
-                </div>
-              )}
-            </dl>
-
-            {user.bio && (
-              <div className="mt-4 rounded-lg bg-slate-50 border border-slate-100 p-3">
-                <p className="text-xs font-medium text-slate-500 mb-1">Bio</p>
-                <p className="text-sm text-slate-700">{user.bio}</p>
-              </div>
-            )}
-
-            <div className="mt-5">
-              <button
-                type="button"
-                onClick={() => navigate('/profile')}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-              >
-                Edit Profile
-              </button>
-            </div>
-          </div>
-        </div>
+    <section className="mx-auto w-full max-w-6xl space-y-6 py-6">
+      <div>
+        <p className="text-sm font-medium text-blue-700">
+          Member area
+        </p>
+        <h1 className="mt-1 text-2xl font-bold text-slate-900">
+          Available Resources
+        </h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Find the right space or equipment for your work.
+        </p>
       </div>
 
-      {/* Dashboard Content */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold text-blue-700">Member area</p>
-        <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">
-          Member Dashboard
-        </h2>
-        <p className="mt-3 text-slate-600">
-          Welcome, {user.name}! Your lab booking dashboard and resource
-          management tools will appear here.
-        </p>
+      <ResourceSearch initialType={selectedCategory} />
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {categories.map((category) => (
+          <button
+            key={category.title}
+            type="button"
+            onClick={() => {
+              setSelectedCategory(category.type)
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            className={`rounded-2xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${selectedCategory === category.type
+              ? 'border-blue-500 ring-2 ring-blue-100'
+              : 'border-slate-200 hover:border-blue-300'
+              }`}
+          >
+            <span className="text-3xl">{category.symbol}</span>
+            <h2 className="mt-4 font-semibold text-slate-900">
+              {category.title}
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              {category.description}
+            </p>
+            <p className="mt-3 text-sm font-medium text-blue-700">
+              Search this category →
+            </p>
+          </button>
+        ))}
       </div>
     </section>
   )
