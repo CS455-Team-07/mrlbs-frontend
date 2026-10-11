@@ -109,3 +109,22 @@ The sign-in UI and callback handling were implemented. Live provider credentials
 **Decision:** Modified.
 
 **Reason:** The Admin configuration is now available and covered by request-payload tests; the booking calculation is delivered in the backend.
+# 2026-10-11 — BOOK-79 member booking submission
+
+**Task/context:** Expose the authenticated booking submission flow and explain reason-coded failures to the Member.
+
+**Prompt:** Complete assigned backlog tickets in a stacked branch/PR series with extensive tests; BOOK-79 covers invalid submissions and insufficient credits.
+
+**AI output/response:** Replaced the Member placeholder with a booking submission form using the authenticated session, CSRF token, and backend API. It presents specific insufficient-credit and unavailable-slot feedback.
+
+**Student/team evaluation:** Pending human review. Resource selection is temporary and will be replaced by searchable resources/availability in BOOK-81.
+
+**Errors, risks, or hallucinations identified:** The API uses local date-time values; serializing browser `datetime-local` values as UTC would make them incompatible with the backend request type, so values are sent as local ISO date-time strings.
+
+**Changes made after evaluating the AI output:** Added tests for request fields/credentials/CSRF and the specific insufficient-credit message.
+
+**Final accepted artifact/output:** Proposed BOOK-79 Member submission UI and tests. Human acceptance is pending.
+
+**Decision:** Modified.
+
+**Reason:** The UI now makes a real authenticated booking request and reports the backend's stable business reason in clear language.
