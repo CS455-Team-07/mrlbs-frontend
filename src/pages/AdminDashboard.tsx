@@ -7,6 +7,8 @@ export function AdminDashboard() {
   const [type, setType] = useState('')
   const [location, setLocation] = useState('')
   const [capacity, setCapacity] = useState('')
+  const [minimumDurationHours, setMinimumDurationHours] = useState('1')
+  const [maximumContentionMultiplier, setMaximumContentionMultiplier] = useState('3')
   const [rules, setRules] = useState([''])
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
@@ -50,6 +52,8 @@ export function AdminDashboard() {
           type,
           location,
           capacity: capacity ? Number(capacity) : null,
+          minimumDurationHours: Number(minimumDurationHours),
+          maximumContentionMultiplier: Number(maximumContentionMultiplier),
           rules: rules.map((rule) => rule.trim()).filter(Boolean),
         }),
       })
@@ -71,6 +75,8 @@ export function AdminDashboard() {
       setType('')
       setLocation('')
       setCapacity('')
+      setMinimumDurationHours('1')
+      setMaximumContentionMultiplier('3')
       setRules([''])
     } catch (submissionError) {
       setError(
@@ -151,6 +157,32 @@ export function AdminDashboard() {
               placeholder="For example, 20"
               type="number"
               value={capacity}
+            />
+          </FormField>
+
+          <FormField hint="Shorter bookings are priced at this minimum duration." id="minimum-duration" label="Minimum billable duration (hours)">
+            <input
+              className={inputClassName}
+              id="minimum-duration"
+              min="0.01"
+              onChange={(event) => setMinimumDurationHours(event.target.value)}
+              required
+              step="0.01"
+              type="number"
+              value={minimumDurationHours}
+            />
+          </FormField>
+
+          <FormField hint="Contention pricing is capped at this multiplier." id="contention-cap" label="Maximum contention multiplier">
+            <input
+              className={inputClassName}
+              id="contention-cap"
+              min="0"
+              onChange={(event) => setMaximumContentionMultiplier(event.target.value)}
+              required
+              step="0.01"
+              type="number"
+              value={maximumContentionMultiplier}
             />
           </FormField>
         </div>

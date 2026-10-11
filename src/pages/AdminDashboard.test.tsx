@@ -53,6 +53,8 @@ describe('admin resource onboarding form', () => {
       type: ' Microscope ',
       location: 'Science Block, Room 12',
       capacity: 8,
+      minimumDurationHours: 1,
+      maximumContentionMultiplier: 3,
       rules: ['Book for up to two hours'],
     })
   })
@@ -80,5 +82,34 @@ describe('admin resource onboarding form', () => {
     )
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     expect(JSON.parse(fetchMock.mock.calls[1][1].body as string).capacity).toBeNull()
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toMatchObject({
+      minimumDurationHours: 1,
+      maximumContentionMultiplier: 3,
+    })
+  })
+
+  it('sends resource-specific pricing floors and contention caps', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'csrf', headerName: 'X-CSRF-TOKEN' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Laser Cutter' }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<AdminDashboard />)
+    await user.type(screen.getByLabelText('Resource name'), 'Laser Cutter')
+    await user.type(screen.getByLabelText('Type or category'), 'Fabrication')
+    await user.type(screen.getByLabelText('Location'), 'Workshop 4')
+    await user.type(screen.getByLabelText('Rule 1'), 'Safety training required')
+    await user.clear(screen.getByLabelText('Minimum billable duration (hours)'))
+    await user.type(screen.getByLabelText('Minimum billable duration (hours)'), '1.5')
+    await user.clear(screen.getByLabelText('Maximum contention multiplier'))
+    await user.type(screen.getByLabelText('Maximum contention multiplier'), '2.5')
+    await user.click(screen.getByRole('button', { name: 'Save resource' }))
+
+    await screen.findByRole('status')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toMatchObject({
+      minimumDurationHours: 1.5,
+      maximumContentionMultiplier: 2.5,
+    })
   })
 })

@@ -90,3 +90,22 @@ Modified; implementation prepared for human review.
 
 **Reason:**\
 The sign-in UI and callback handling were implemented. Live provider credentials must be configured by the deployment owner.
+# 2026-10-11 — BOOK-78 pricing edge cases
+
+**Task/context:** Add Admin inputs for per-resource minimum billable duration and maximum contention multiplier, and cover their API payload with tests.
+
+**Prompt:** Complete assigned Jira backlog issues on stacked branches and include extensive unit tests; BOOK-78 requires Admin-configurable pricing edge cases.
+
+**AI output/response:** Added validated numeric controls with defaults matching initial policy and included values in the resource creation request. Added UI tests for the defaults and custom values.
+
+**Student/team evaluation:** Pending human review.
+
+**Errors, risks, or hallucinations identified:** The booking workflow is not yet present on this branch, so this change configures the policy but does not itself consume the values during a booking.
+
+**Changes made after evaluating the AI output:** Connected both settings to the existing resource onboarding payload and reset their values on successful creation.
+
+**Final accepted artifact/output:** Proposed BOOK-78 Admin form and tests. Human acceptance is pending.
+
+**Decision:** Modified.
+
+**Reason:** The Admin configuration is now available and covered by request-payload tests; the booking calculation is delivered in the backend.
