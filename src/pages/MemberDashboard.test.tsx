@@ -142,4 +142,45 @@ describe('member resource discovery and booking', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Your original booking is unchanged')
     expect(screen.getByText('2030-05-02 10:00 to 2030-05-02 11:00')).toBeInTheDocument()
   })
+
+  it('cancels an upcoming booking with CSRF protection and refreshes its status', async () => {
+    const existing = { id: 'booking-1', resourceId: resource.id, startTime: '2030-05-02T10:00:00', endTime: '2030-05-02T11:00:00', status: 'CONFIRMED', creditCost: 4 }
+    const cancelled = { ...existing, status: 'CANCELLED' }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => [existing] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'csrf', headerName: 'X-CSRF-TOKEN' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => cancelled })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<MemberDashboard />)
+    await user.click(screen.getByRole('button', { name: 'Refresh bookings' }))
+    await screen.findByText('2030-05-02 10:00 to 2030-05-02 11:00')
+    await user.click(screen.getByRole('button', { name: 'Cancel booking' }))
+
+    expect(await screen.findByText(/CANCELLED · 4 credits/)).toBeInTheDocument()
+    expect(fetchMock.mock.calls[2][1]).toMatchObject({
+      method: 'DELETE', credentials: 'include', headers: { 'X-CSRF-TOKEN': 'csrf' },
+    })
+    expect(String(fetchMock.mock.calls[2][0])).toContain('/bookings/booking-1')
+    expect(screen.queryByRole('button', { name: 'Cancel booking' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the booking active when the server rejects cancellation after its start', async () => {
+    const existing = { id: 'booking-1', resourceId: resource.id, startTime: '2030-05-02T10:00:00', endTime: '2030-05-02T11:00:00', status: 'CONFIRMED', creditCost: 4 }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => [existing] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'csrf', headerName: 'X-CSRF-TOKEN' }) })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ reasonCode: 'BOOKING_NOT_MODIFIABLE' }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<MemberDashboard />)
+    await user.click(screen.getByRole('button', { name: 'Refresh bookings' }))
+    await screen.findByText('2030-05-02 10:00 to 2030-05-02 11:00')
+    await user.click(screen.getByRole('button', { name: 'Cancel booking' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This booking can no longer be cancelled')
+    expect(screen.getByText(/CONFIRMED · 4 credits/)).toBeInTheDocument()
+  })
 })
