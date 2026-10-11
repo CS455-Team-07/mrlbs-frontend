@@ -1,19 +1,19 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { apiClientConfig } from '../services/apiClient'
-interface OnboardedResource {
-  id: string
-  name: string
-}
+import type { Resource } from '../types/Resource'
 
 export function ResourceOnboardingForm() {
   const [name, setName] = useState('')
   const [type, setType] = useState('')
   const [location, setLocation] = useState('')
   const [capacity, setCapacity] = useState('')
+  const [minimumDurationHours, setMinimumDurationHours] = useState('1')
+  const [maximumContentionMultiplier, setMaximumContentionMultiplier] = useState('3')
+  const [approvalRequired, setApprovalRequired] = useState(false)
   const [rules, setRules] = useState([''])
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
-  const [createdResource, setCreatedResource] = useState<OnboardedResource | null>(null)
+  const [createdResource, setCreatedResource] = useState<Resource | null>(null)
 
   function updateRule(index: number, value: string) {
     setRules((currentRules) =>
@@ -30,15 +30,32 @@ export function ResourceOnboardingForm() {
     setCreatedResource(null)
 
     try {
+      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, {
+        credentials: 'include',
+      })
+      if (!csrfResponse.ok) {
+        throw new Error('Could not prepare the secure resource request.')
+      }
+      const csrf = (await csrfResponse.json()) as {
+        token: string
+        headerName: string
+      }
+
       const response = await fetch(`${apiClientConfig.baseUrl}/resources`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          [csrf.headerName]: csrf.token,
+        },
         credentials: 'include',
         body: JSON.stringify({
           name,
           type,
           location,
           capacity: capacity ? Number(capacity) : null,
+          minimumDurationHours: Number(minimumDurationHours),
+          maximumContentionMultiplier: Number(maximumContentionMultiplier),
+          approvalRequired,
           rules: rules.map((rule) => rule.trim()).filter(Boolean),
         }),
       })
@@ -54,12 +71,15 @@ export function ResourceOnboardingForm() {
         throw new Error(problem?.detail ?? 'The resource could not be saved.')
       }
 
-      const resource = (await response.json()) as OnboardedResource
+      const resource = (await response.json()) as Resource
       setCreatedResource(resource)
       setName('')
       setType('')
       setLocation('')
       setCapacity('')
+      setMinimumDurationHours('1')
+      setMaximumContentionMultiplier('3')
+      setApprovalRequired(false)
       setRules([''])
     } catch (submissionError) {
       setError(
@@ -142,7 +162,38 @@ export function ResourceOnboardingForm() {
               value={capacity}
             />
           </FormField>
+
+          <FormField hint="Shorter bookings are priced at this minimum duration." id="minimum-duration" label="Minimum billable duration (hours)">
+            <input
+              className={inputClassName}
+              id="minimum-duration"
+              min="0.01"
+              onChange={(event) => setMinimumDurationHours(event.target.value)}
+              required
+              step="0.01"
+              type="number"
+              value={minimumDurationHours}
+            />
+          </FormField>
+
+          <FormField hint="Contention pricing is capped at this multiplier." id="contention-cap" label="Maximum contention multiplier">
+            <input
+              className={inputClassName}
+              id="contention-cap"
+              min="0"
+              onChange={(event) => setMaximumContentionMultiplier(event.target.value)}
+              required
+              step="0.01"
+              type="number"
+              value={maximumContentionMultiplier}
+            />
+          </FormField>
         </div>
+
+        <label className="flex items-start gap-3 rounded-lg border border-slate-200 p-4 text-sm text-slate-700">
+          <input checked={approvalRequired} className="mt-1" onChange={(event) => setApprovalRequired(event.target.checked)} type="checkbox" />
+          <span><span className="font-semibold text-slate-900">Require Admin approval for bookings</span><span className="mt-1 block text-slate-500">Requests stay pending until reviewed by an Admin.</span></span>
+        </label>
 
         <fieldset className="space-y-3">
           <legend className="text-sm font-semibold text-slate-800">

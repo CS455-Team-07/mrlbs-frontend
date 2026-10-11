@@ -1,145 +1,112 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { isAuthorizedAdmin } from '../config/adminConfig'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { apiClientConfig } from '../services/apiClient'
+
+interface AuthenticatedUser {
+  id: string
+  name: string
+  email: string
+}
 
 export function LoginPage() {
   const { login } = useAuth()
-  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const authenticated = searchParams.has('authenticated')
+  const authenticationError = searchParams.get('error')
+  const [user, setUser] = useState<AuthenticatedUser | null>(null)
+  const [status, setStatus] = useState(authenticated ? 'Checking your sign-in…' : '')
 
-  const [email, setEmail] = useState('')
-  const [error, setError] = useState('')
+  useEffect(() => {
+    if (!authenticated) return
 
-  const handleLogin = (selectedRole: 'admin' | 'member') => {
-    setError('')
+    let cancelled = false
 
-    const normalizedEmail = email.trim().toLowerCase()
+    async function loadUser() {
+      try {
+        const response = await fetch(`${apiClientConfig.baseUrl}/auth/me`, {
+          credentials: 'include',
+        })
+        if (!response.ok) {
+          throw new Error('Your sign-in could not be verified. Please try again.')
+        }
 
-    if (!normalizedEmail) {
-      setError('Please enter your IITK email address.')
-      return
+        const signedInUser = (await response.json()) as AuthenticatedUser
+        if (!signedInUser.email.trim().toLowerCase().endsWith('@iitk.ac.in')) {
+          throw new Error('Use the Google Workspace account for iitk.ac.in to sign in.')
+        }
+
+        login(signedInUser)
+        if (!cancelled) {
+          setUser(signedInUser)
+          setStatus('')
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setStatus(
+            error instanceof Error
+              ? error.message
+              : 'Your sign-in could not be verified. Please try again.',
+          )
+        }
+      }
     }
 
-    if (!normalizedEmail.endsWith('@iitk.ac.in')) {
-      setError('Please use a valid IITK email address.')
-      return
+    void loadUser()
+    return () => {
+      cancelled = true
     }
+  }, [authenticated, login])
 
-    const actualRole = isAuthorizedAdmin(normalizedEmail)
-      ? 'admin'
-      : 'member'
-
-    if (selectedRole !== actualRole) {
-      setError(
-        `This email is registered as a ${actualRole}. Please use "Login as ${
-          actualRole === 'admin' ? 'Admin' : 'Member'
-        }".`,
-      )
-      return
-    }
-
-    login({
-      email: normalizedEmail,
-      name: normalizedEmail.split('@')[0],
-    })
-
-    navigate('/', { replace: true })
-  }
+  const errorMessage =
+    authenticationError === 'institutional-domain'
+      ? 'Use the Google Workspace account for iitk.ac.in to sign in.'
+      : authenticationError
+        ? 'Google sign-in did not complete. Please try again.'
+        : ''
 
   return (
-    <section className="mx-auto w-full max-w-xl py-12">
-      <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm sm:p-10">
+    <section className="my-auto rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+      <p className="text-sm font-semibold text-blue-700">Institutional sign-in</p>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
+        Sign in to MRLBS
+      </h1>
+      <p className="mt-3 max-w-xl text-slate-600">
+        Continue with your IIT Kanpur Google Workspace account. Only verified
+        identities from the configured institutional domain can access MRLBS.
+      </p>
 
-        {/* Heading */}
-        <div className="text-center">
-          <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-blue-700 text-lg font-bold text-white">
-            MR
-          </div>
+      {errorMessage && (
+        <p className="mt-6 rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800" role="alert">
+          {errorMessage}
+        </p>
+      )}
 
-          <p className="mt-5 text-xs font-bold uppercase tracking-[0.2em] text-blue-700">
-            Multi-Resource Lab Booking System
-          </p>
+      {status && (
+        <p className="mt-6 text-sm text-slate-700" aria-live="polite" role="status">
+          {status}
+        </p>
+      )}
 
-          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950">
-            Institutional Login
-          </h1>
-
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            Sign in using your IIT Kanpur institutional email address.
-          </p>
+      {user ? (
+        <div className="mt-6 rounded-lg bg-emerald-50 p-4 text-sm text-emerald-900" role="status">
+          <p className="font-semibold">Signed in as {user.name}</p>
+          <p className="mt-1">{user.email}</p>
         </div>
+      ) : (
+        <a
+          className="mt-6 inline-flex rounded-lg bg-blue-700 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-800"
+          href={`${apiClientConfig.authBaseUrl}/oauth2/authorization/google`}
+        >
+          Continue with Google
+        </a>
+      )}
 
-        {/* Email */}
-        <div className="mt-8">
-          <label
-            htmlFor="iitk-email"
-            className="block text-sm font-semibold text-slate-700"
-          >
-            IITK Email Address
-          </label>
-
-          <input
-            id="iitk-email"
-            type="email"
-            value={email}
-            onChange={(event) => {
-              setEmail(event.target.value)
-              setError('')
-            }}
-            placeholder="yourname@iitk.ac.in"
-            autoComplete="email"
-            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-          />
-
-          {error && (
-            <p
-              role="alert"
-              className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-            >
-              {error}
-            </p>
-          )}
-        </div>
-
-        {/* Login buttons */}
-        <div className="mt-7 grid gap-3 sm:grid-cols-2">
-
-          <button
-            type="button"
-            onClick={() => handleLogin('admin')}
-            className="flex items-center justify-center gap-3 rounded-xl bg-purple-700 px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-800"
-          >
-            <span className="grid size-6 place-items-center rounded-full bg-purple-950/40 text-xs font-bold">
-              A
-            </span>
-
-            Login as Admin
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleLogin('member')}
-            className="flex items-center justify-center gap-3 rounded-xl bg-blue-700 px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800"
-          >
-            <span className="grid size-6 place-items-center rounded-full bg-blue-950/40 text-xs font-bold">
-              M
-            </span>
-
-            Login as Member
-          </button>
-
-        </div>
-
-        {/* Explanation */}
-        <div className="mt-7 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs leading-5 text-slate-600">
-            Your role is determined by your IITK email address. Admin access
-            is granted only to emails registered in the authorized admin
-            configuration.
-          </p>
-        </div>
-
-      </div>
+      <p className="mt-6">
+        <Link to="/" className="text-sm font-semibold text-blue-700 hover:text-blue-900">
+          Return to home
+        </Link>
+      </p>
     </section>
   )
 }

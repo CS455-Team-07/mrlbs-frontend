@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 import {
   getActiveUserProfile,
   handleUserAuthentication,
@@ -14,11 +14,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getActiveUserProfile(),
   )
 
-  const login = (identity: AuthenticatedIdentity): UserProfile => {
+  const login = useCallback((identity: AuthenticatedIdentity): UserProfile => {
     const profile = handleUserAuthentication(identity)
     setUser(profile)
     return profile
-  }
+  }, [])
 
   const logout = () => {
     setActiveUserProfile(null)

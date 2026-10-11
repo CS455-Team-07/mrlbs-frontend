@@ -48,13 +48,14 @@ Copy `.env.example` to `.env` and set the Vite environment variables needed for 
 
 ```env
 VITE_API_BASE_URL=http://localhost:8080/api
+VITE_AUTH_BASE_URL=http://localhost:8080
 ```
 
-API clients are not implemented yet. Future frontend REST clients should read their base URL from this configuration rather than hardcoding URLs in application components.
+`VITE_API_BASE_URL` configures API calls. `VITE_AUTH_BASE_URL` configures the backend OAuth redirect endpoint. The login page redirects to Google and displays the verified account after the backend accepts its institutional identity.
 
 ## Current status
 
-Initial scaffold only. The application contains placeholder landing, login, member, and admin pages, navigation, and route layouts. It does not implement authentication, booking workflows, API calls, or other business functionality.
+Google OIDC sign-in is implemented for the configured institutional domain. Booking and user-profile workflows remain future work.
 
 ## AI Engineering Log
 

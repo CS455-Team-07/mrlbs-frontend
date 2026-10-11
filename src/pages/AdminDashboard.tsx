@@ -8,7 +8,7 @@ import {
   restoreResource,
 } from '../services/resourceService'
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8081/api'
+  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
 type ResourceDraft = {
   name: string
   type: string
@@ -66,9 +66,24 @@ export function AdminDashboard() {
     }
   }
 
+  const fetchInactiveResources = async () => {
+    try {
+      const data = await getInactiveResources()
+      setInactiveResources(data)
+      setRestoreError('')
+    } catch (error) {
+      console.error('Failed to load inactive resources:', error)
+      setRestoreError('Unable to load inactive resources.')
+    }
+  }
+
   useEffect(() => {
-    fetchResources()
-    fetchInactiveResources()
+    const loadResources = async () => {
+      await Promise.resolve()
+      await Promise.all([fetchResources(), fetchInactiveResources()])
+    }
+
+    void loadResources()
   }, [])
 
   const updateDraft = (resourceId: number, field: keyof ResourceDraft, value: string | number) => {
@@ -132,17 +147,6 @@ export function AdminDashboard() {
       setSaveError('Changes could not be saved. Please check the values and try again.')
     } finally {
       setSavingId(null)
-    }
-  }
-
-  const fetchInactiveResources = async () => {
-    try {
-      const data = await getInactiveResources()
-      setInactiveResources(data)
-      setRestoreError('')
-    } catch (error) {
-      console.error('Failed to load inactive resources:', error)
-      setRestoreError('Unable to load inactive resources.')
     }
   }
 

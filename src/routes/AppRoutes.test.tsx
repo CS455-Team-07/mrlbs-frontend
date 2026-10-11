@@ -1,10 +1,17 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { clearUserStorage } from '../services/userService'
 import { AppRoutes } from './AppRoutes'
 
-describe('application navigation and authentication flow', () => {
-  it('shows the login page when the application is opened', () => {
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+  clearUserStorage()
+})
+
+describe('application navigation and institutional authentication', () => {
+  it('offers Google OAuth sign-in from the login route', () => {
     render(
       <MemoryRouter initialEntries={['/login']}>
         <AppRoutes />
@@ -12,115 +19,38 @@ describe('application navigation and authentication flow', () => {
     )
 
     expect(
-      screen.getAllByText(/multi-resource lab booking system/i).length,
-    ).toBeGreaterThan(0)
-
-    expect(
-      screen.getByRole('heading', {
-        name: /institutional login/i,
-      }),
+      screen.getByRole('heading', { name: /sign in to mrlbs/i }),
     ).toBeInTheDocument()
-
     expect(
-      screen.getByLabelText(/iitk email address/i),
-    ).toBeInTheDocument()
-
-    expect(
-      screen.getByRole('button', {
-        name: /login as admin/i,
-      }),
-    ).toBeInTheDocument()
-
-    expect(
-      screen.getByRole('button', {
-        name: /login as member/i,
-      }),
-    ).toBeInTheDocument()
+      screen.getByRole('link', { name: /continue with google/i }),
+    ).toHaveAttribute('href', expect.stringMatching(/\/oauth2\/authorization\/google$/))
   })
 
-  it('allows an IITK member to log in and reach the home page', () => {
+  it('adds the verified Google identity to the app session after callback verification', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'google-subject', name: 'Ananya', email: 'ananya@iitk.ac.in' }),
+    }))
+
     render(
-      <MemoryRouter initialEntries={['/login']}>
+      <MemoryRouter initialEntries={['/login?authenticated']}>
         <AppRoutes />
       </MemoryRouter>,
     )
 
-    const emailInput = screen.getByLabelText(/iitk email address/i)
-
-    fireEvent.change(emailInput, {
-      target: {
-        value: 'student@iitk.ac.in',
-      },
-    })
-
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: /login as member/i,
-      }),
-    )
-
-    expect(
-      screen.getByRole('heading', {
-        name: /welcome, student/i,
-      }),
-    ).toBeInTheDocument()
-
-    expect(
-      screen.getByText(/student@iitk.ac.in/i),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Signed in as Ananya')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /open profile/i })).toBeInTheDocument()
   })
 
-  it('rejects a non-IITK email address', () => {
+  it('explains when Google rejects an identity outside the institutional domain', () => {
     render(
-      <MemoryRouter initialEntries={['/login']}>
+      <MemoryRouter initialEntries={['/login?error=institutional-domain']}>
         <AppRoutes />
       </MemoryRouter>,
     )
 
-    const emailInput = screen.getByLabelText(/iitk email address/i)
-
-    fireEvent.change(emailInput, {
-      target: {
-        value: 'student@gmail.com',
-      },
-    })
-
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: /login as member/i,
-      }),
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Use the Google Workspace account for iitk.ac.in to sign in.',
     )
-
-    expect(
-      screen.getByText(/please use a valid iitk email address/i),
-    ).toBeInTheDocument()
-  })
-
-  it('shows the profile option after login', () => {
-    render(
-      <MemoryRouter initialEntries={['/login']}>
-        <AppRoutes />
-      </MemoryRouter>,
-    )
-
-    const emailInput = screen.getByLabelText(/iitk email address/i)
-
-    fireEvent.change(emailInput, {
-      target: {
-        value: 'student@iitk.ac.in',
-      },
-    })
-
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: /login as member/i,
-      }),
-    )
-
-    expect(
-      screen.getByRole('button', {
-        name: /open profile/i,
-      }),
-    ).toBeInTheDocument()
   })
 })

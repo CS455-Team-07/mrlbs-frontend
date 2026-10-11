@@ -148,3 +148,23 @@ Modified; implementation prepared for human review.
 
 **Reason:**\
 The requested onboarding form remains available alongside the merged resource management workflows.
+
+#### 2026-10-11 — BOOK-10 institutional Google OIDC sign-in
+
+**Task / Context:**\
+Implement the frontend sign-in experience for FR-1.1 / US-1 using Google OIDC and the configured institutional domain.
+
+**AI Output:**\
+Added the Google sign-in link, callback identity display, institutional-domain error messaging, and API/auth URL configuration. The successful OAuth callback is verified through `/auth/me` before the frontend profile is created. Resource creation includes the backend CSRF token.
+
+**Student/Team Evaluation:**\
+Pending human review. A live Google provider round-trip requires configured OAuth client credentials.
+
+**Errors / Risks / Hallucinations:**\
+Backend authentication remains authoritative for institutional-domain access; frontend checks provide user feedback and do not replace server-side enforcement.
+
+**Final Accepted Artifact:**\
+Proposed BOOK-10 frontend OAuth sign-in and callback handling.
+
+**Decision:**\
+Modified; implementation prepared for review.

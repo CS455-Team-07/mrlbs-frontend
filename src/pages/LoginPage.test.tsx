@@ -1,64 +1,85 @@
-import { render, fireEvent, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it } from 'vitest'
-import {
-  resetAuthorizedAdmins,
-  setAuthorizedAdmins,
-} from '../config/adminConfig'
-import { AppRoutes } from '../routes/AppRoutes'
+import { AuthProvider } from '../context/AuthContext'
 import { clearUserStorage } from '../services/userService'
+import { LoginPage } from './LoginPage'
 
-describe('LoginPage institutional email authentication flow', () => {
-  beforeEach(() => {
-    clearUserStorage()
-    resetAuthorizedAdmins()
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+  clearUserStorage()
+})
+
+function renderLoginPage(initialEntries: string[] = ['/login']) {
+  return render(
+    <AuthProvider>
+      <MemoryRouter initialEntries={initialEntries}>
+        <LoginPage />
+      </MemoryRouter>
+    </AuthProvider>,
+  )
+}
+
+describe('institutional Google sign-in', () => {
+  it('starts Google OAuth sign-in', () => {
+    renderLoginPage()
+
+    expect(screen.getByRole('link', { name: /continue with google/i })).toHaveAttribute(
+      'href',
+      expect.stringMatching(/\/oauth2\/authorization\/google$/),
+    )
   })
 
-  it('allows Ananya to sign in and assigns Admin role when in authorized admin configuration', async () => {
-    setAuthorizedAdmins(['ananya@iitk.ac.in'])
+  it('explains that an account outside the institutional domain was denied', () => {
+    renderLoginPage(['/login?error=institutional-domain'])
 
-    render(
-      <MemoryRouter initialEntries={['/login']}>
-        <AppRoutes />
-      </MemoryRouter>,
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Use the Google Workspace account for iitk.ac.in to sign in.',
     )
-
-    const emailInput = screen.getByLabelText(/IITK Email Address/i)
-    const adminButton = screen.getByRole('button', {
-      name: /login as admin/i,
-    })
-
-    fireEvent.change(emailInput, {
-      target: { value: 'ananya@iitk.ac.in' },
-    })
-    fireEvent.click(adminButton)
-
-    expect(screen.getByText(/Welcome, ananya/i)).toBeInTheDocument()
-    expect(screen.getAllByText('ananya@iitk.ac.in').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('admin').length).toBeGreaterThan(0)
   })
 
-  it('assigns Member role to non-admin user upon first authentication', async () => {
-    setAuthorizedAdmins(['admin@iitk.ac.in'])
+  it('loads and displays the signed-in identity after the OAuth callback', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'google-subject', name: 'Ananya', email: 'ananya@iitk.ac.in' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
 
-    render(
-      <MemoryRouter initialEntries={['/login']}>
-        <AppRoutes />
-      </MemoryRouter>,
+    renderLoginPage(['/login?authenticated'])
+
+    expect(await screen.findByText('Signed in as Ananya')).toBeInTheDocument()
+    expect(screen.getByText('ananya@iitk.ac.in')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/auth\/me$/),
+      { credentials: 'include' },
+    )
+  })
+
+  it('reports when the authenticated session cannot be verified', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false }),
     )
 
-    const emailInput = screen.getByLabelText(/IITK Email Address/i)
-    const memberButton = screen.getByRole('button', {
-      name: /login as member/i,
-    })
+    renderLoginPage(['/login?authenticated'])
 
-    fireEvent.change(emailInput, {
-      target: { value: 'student@iitk.ac.in' },
-    })
-    fireEvent.click(memberButton)
+    expect(
+      await screen.findByText('Your sign-in could not be verified. Please try again.'),
+    ).toBeInTheDocument()
+  })
 
-    expect(screen.getByText(/Welcome, student/i)).toBeInTheDocument()
-    expect(screen.getAllByText('student@iitk.ac.in').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('member').length).toBeGreaterThan(0)
+  it('does not create a local platform profile for an identity outside IITK', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'google-subject', name: 'External', email: 'external@example.com' }),
+    }))
+
+    renderLoginPage(['/login?authenticated'])
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Use the Google Workspace account for iitk.ac.in to sign in.',
+    )
+    expect(localStorage.getItem('mrlbs_active_user_profile')).toBeNull()
   })
 })
