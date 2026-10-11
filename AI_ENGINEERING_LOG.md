@@ -166,3 +166,22 @@ The sign-in UI and callback handling were implemented. Live provider credentials
 **Decision:** Modified.
 
 **Reason:** The Admin can now persist the policy that drives the backend pending state.
+# 2026-10-11 — BOOK-91 concurrent slot rejection feedback
+
+**Task/context:** Ensure the Member booking form explains a conflict returned when another request wins the slot.
+
+**Prompt:** Complete assigned Sprint 3 work in stacked PRs with extensive tests. BOOK-91/BOOK-92 require the losing request to receive a clear unavailable-slot result.
+
+**AI output/response:** Added UI regression coverage for the backend `SLOT_NO_LONGER_AVAILABLE` reason code.
+
+**Student/team evaluation:** Pending human review.
+
+**Errors, risks, or hallucinations identified:** The existing form already handled this reason code; this branch adds its missing test and keeps the UI behavior explicit.
+
+**Changes made after evaluating the AI output:** Test submits a request after searching and selecting availability, then asserts the user-facing conflict message.
+
+**Final accepted artifact/output:** Proposed BOOK-91 conflict feedback regression test.
+
+**Decision:** Modified.
+
+**Reason:** The contention failure has user-visible feedback and test coverage.

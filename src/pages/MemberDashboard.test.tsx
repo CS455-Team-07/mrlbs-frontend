@@ -73,4 +73,22 @@ describe('member resource discovery and booking', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('not have enough credits')
   })
+
+  it('explains when a selected slot is taken by a concurrent booking', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => [resource] })
+      .mockResolvedValueOnce({ ok: true, json: async () => availability })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'csrf', headerName: 'X-CSRF-TOKEN' }) })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ reasonCode: 'SLOT_NO_LONGER_AVAILABLE' }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<MemberDashboard />)
+    await searchAndChoose(user)
+    await user.type(screen.getByLabelText('Start time'), '2030-05-01T11:00')
+    await user.type(screen.getByLabelText('End time'), '2030-05-01T12:00')
+    await user.click(screen.getByRole('button', { name: 'Submit booking' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This slot is no longer available')
+  })
 })
