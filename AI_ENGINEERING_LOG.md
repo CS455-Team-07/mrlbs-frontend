@@ -185,3 +185,41 @@ The sign-in UI and callback handling were implemented. Live provider credentials
 **Decision:** Modified.
 
 **Reason:** The contention failure has user-visible feedback and test coverage.
+# 2026-10-11 — BOOK-86 member time-window changes
+
+**Task/context:** Let Members view their bookings and change a future confirmed booking's time window.
+
+**Prompt:** Complete Teja Satvik's assigned tickets through Sprint 3 with stacked PRs and extensive tests.
+
+**AI output/response:** Added a member booking list with an edit flow that submits the new window to the backend and updates the displayed booking after success.
+
+**Student/team evaluation:** Pending human review.
+
+**Errors, risks, or hallucinations identified:** The server remains authoritative for start-time eligibility, pricing, availability, and transactional locking.
+
+**Changes made after evaluating the AI output:** Added tests for successful replacement and a conflict response that leaves the original displayed window intact.
+
+**Final accepted artifact/output:** Proposed BOOK-86 booking history and modification flow. Human acceptance is pending.
+
+**Decision:** Modified.
+
+**Reason:** The Member has an authenticated path to modify a booking while preserving server-side validation.
+# 2026-10-11 — BOOK-88 booking cancellation safeguards
+
+**Task/context:** Let Members cancel eligible upcoming bookings and explain when the server rejects cancellation after start.
+
+**Prompt:** Complete assigned Sprint 3 tickets in stacked PRs with extensive tests.
+
+**AI output/response:** Added a CSRF-protected cancellation action for confirmed and pending bookings; the list updates only when the backend confirms cancellation.
+
+**Student/team evaluation:** Pending human review.
+
+**Errors, risks, or hallucinations identified:** Eligibility is decided by the backend using the persisted status and scheduled start time.
+
+**Changes made after evaluating the AI output:** Added frontend tests for successful cancellation and a post-start rejection that leaves the booking active in the list.
+
+**Final accepted artifact/output:** Proposed BOOK-88 member cancellation action and tests. Human acceptance is pending.
+
+**Decision:** Modified.
+
+**Reason:** The Member can request cancellation while the UI reflects only server-confirmed status changes.
