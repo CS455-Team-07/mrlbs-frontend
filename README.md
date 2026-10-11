@@ -48,13 +48,14 @@ Copy `.env.example` to `.env` and set the Vite environment variables needed for 
 
 ```env
 VITE_API_BASE_URL=http://localhost:8080/api
+VITE_AUTH_ENABLED=false
 ```
 
-`VITE_API_BASE_URL` configures both API calls and Google OAuth redirects because both endpoints are served by the same backend. For local sign-in, start the backend on port `8080` with its database and Google OAuth credentials configured before choosing **Continue with Google**. If the backend is stopped or uses a different port, update `VITE_API_BASE_URL` and restart the Vite dev server.
+Authentication is turned off by default for the current project demo. The frontend uses a demo administrator profile and expects the backend to run with authentication disabled too. Set `VITE_AUTH_ENABLED=true` to restore the Google sign-in flow; the backend must also be configured with `AUTH_ENABLED=true` and valid Google OAuth credentials. `VITE_API_BASE_URL` configures API calls and Google OAuth redirects from the same backend.
 
 ## Current status
 
-Google OIDC sign-in is implemented for the configured institutional domain. Booking and user-profile workflows remain future work.
+The Google OIDC flow remains available when authentication is enabled. Booking and user-profile workflows remain future work.
 
 ## AI Engineering Log
 

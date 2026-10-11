@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { authenticationEnabled } from '../config/authConfig'
 
 export function AppHeader() {
   const { user, isAuthenticated, logout } = useAuth()
@@ -94,13 +95,15 @@ export function AppHeader() {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={logout}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                Exit
-              </button>
+              {authenticationEnabled && (
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Exit
+                </button>
+              )}
             </>
           ) : (
             <NavLink
@@ -155,16 +158,18 @@ export function AppHeader() {
 
             <div className="my-2 border-t border-slate-100" />
 
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false)
-                logout()
-              }}
-              className="block w-full rounded-lg px-4 py-2.5 text-left text-sm font-medium text-red-600 hover:bg-red-50"
-            >
-              Exit
-            </button>
+            {authenticationEnabled && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false)
+                  logout()
+                }}
+                className="block w-full rounded-lg px-4 py-2.5 text-left text-sm font-medium text-red-600 hover:bg-red-50"
+              >
+                Exit
+              </button>
+            )}
           </nav>
         </>
       )}

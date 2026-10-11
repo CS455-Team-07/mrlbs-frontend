@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { apiClientConfig } from '../services/apiClient'
+import { authenticationEnabled } from '../config/authConfig'
 
 interface AuthenticatedUser {
   id: string
@@ -18,7 +19,7 @@ export function LoginPage() {
   const [status, setStatus] = useState(authenticated ? 'Checking your sign-in…' : '')
 
   useEffect(() => {
-    if (!authenticated) return
+    if (!authenticationEnabled || !authenticated) return
 
     let cancelled = false
 
@@ -57,6 +58,8 @@ export function LoginPage() {
       cancelled = true
     }
   }, [authenticated, login])
+
+  if (!authenticationEnabled) return <Navigate to="/" replace />
 
   const errorMessage =
     authenticationError === 'institutional-domain'

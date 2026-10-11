@@ -7,11 +7,12 @@ import {
   type AuthenticatedIdentity,
 } from '../services/userService'
 import type { UserProfile } from '../types/User'
+import { authenticationEnabled, demoProfile } from '../config/authConfig'
 import { AuthContext } from './authContextInstance'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(() =>
-    getActiveUserProfile(),
+    authenticationEnabled ? getActiveUserProfile() : { ...demoProfile },
   )
 
   const login = useCallback((identity: AuthenticatedIdentity): UserProfile => {
@@ -21,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = () => {
+    if (!authenticationEnabled) return
     setActiveUserProfile(null)
     setUser(null)
   }
@@ -29,6 +31,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     updates: Partial<Pick<UserProfile, 'name' | 'avatarUrl' | 'institutionalId' | 'department' | 'bio' | 'profileCompleted'>>,
   ): UserProfile | null => {
     if (!user) return null
+    if (!authenticationEnabled) {
+      const updated = { ...user, ...updates }
+      setUser(updated)
+      return updated
+    }
     const updated = updateUserProfile(user.email, updates)
     if (updated) setUser(updated)
     return updated

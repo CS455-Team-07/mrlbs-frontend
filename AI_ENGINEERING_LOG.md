@@ -194,3 +194,21 @@ Modified; implementation prepared for review.
 
 **Reason:**\
 The video exposed a split-origin configuration that could send OAuth to an inactive port while API requests target the configured backend.
+
+#### 2026-10-12 — Default unauthenticated project demo
+
+**Task / Context:** The user asked to make the website usable without Google authentication and clarified that teammates should not need extra development-mode instructions.
+
+**AI Output:** Added a default demo administrator profile in the frontend and hid the Google sign-in entry points while authentication is disabled.
+
+**Student/Team Evaluation:** Pending human review.
+
+**Errors / Risks / Hallucinations:** The demo identity has admin UI access; use only for a controlled demo. No tests were run.
+
+**Changes Made After Evaluation:** Added `VITE_AUTH_ENABLED` as the switch to restore the Google sign-in flow; the default remains disabled for the project demo.
+
+**Final Accepted Artifact:** Proposed frontend demo profile, no-auth navigation, and setup documentation.
+
+**Decision:** Modified.
+
+**Reason:** The frontend now opens directly into the app for teammates while preserving the OIDC flow behind an explicit configuration setting.

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { authenticationEnabled } from '../config/authConfig'
 
 export function LandingPage() {
   return (
@@ -11,21 +12,24 @@ export function LandingPage() {
           A simple starting point for shared lab resources.
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-8 text-slate-600">
-          Sign in with your institutional Google Workspace account to access
-          shared lab resources.
+          {authenticationEnabled
+            ? 'Sign in with your institutional Google Workspace account to access shared lab resources.'
+            : 'Explore shared lab resources and booking tools. Sign-in is currently turned off.'}
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
+          {authenticationEnabled && (
+            <Link
+              to="/login"
+              className="rounded-lg bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-800"
+            >
+              Sign in with Google
+            </Link>
+          )}
           <Link
-            to="/login"
-            className="rounded-lg bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-800"
-          >
-            Sign in with Google
-          </Link>
-          <Link
-            to="/member"
+            to={authenticationEnabled ? '/member' : '/admin'}
             className="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
-            View dashboard placeholders
+            {authenticationEnabled ? 'View dashboard placeholders' : 'Open the dashboard'}
           </Link>
         </div>
       </div>
