@@ -9,6 +9,7 @@ export function AdminDashboard() {
   const [capacity, setCapacity] = useState('')
   const [minimumDurationHours, setMinimumDurationHours] = useState('1')
   const [maximumContentionMultiplier, setMaximumContentionMultiplier] = useState('3')
+  const [approvalRequired, setApprovalRequired] = useState(false)
   const [rules, setRules] = useState([''])
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
@@ -54,6 +55,7 @@ export function AdminDashboard() {
           capacity: capacity ? Number(capacity) : null,
           minimumDurationHours: Number(minimumDurationHours),
           maximumContentionMultiplier: Number(maximumContentionMultiplier),
+          approvalRequired,
           rules: rules.map((rule) => rule.trim()).filter(Boolean),
         }),
       })
@@ -77,6 +79,7 @@ export function AdminDashboard() {
       setCapacity('')
       setMinimumDurationHours('1')
       setMaximumContentionMultiplier('3')
+      setApprovalRequired(false)
       setRules([''])
     } catch (submissionError) {
       setError(
@@ -186,6 +189,11 @@ export function AdminDashboard() {
             />
           </FormField>
         </div>
+
+        <label className="flex items-start gap-3 rounded-lg border border-slate-200 p-4 text-sm text-slate-700">
+          <input checked={approvalRequired} className="mt-1" onChange={(event) => setApprovalRequired(event.target.checked)} type="checkbox" />
+          <span><span className="font-semibold text-slate-900">Require Admin approval for bookings</span><span className="mt-1 block text-slate-500">Requests stay pending until reviewed by an Admin.</span></span>
+        </label>
 
         <fieldset className="space-y-3">
           <legend className="text-sm font-semibold text-slate-800">

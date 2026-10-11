@@ -4,5 +4,6 @@ export interface Resource {
   type: string
   location: string
   capacity: number | null
+  approvalRequired?: boolean
   rules: string[]
 }
