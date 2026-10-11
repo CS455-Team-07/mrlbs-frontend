@@ -168,3 +168,29 @@ Proposed BOOK-10 frontend OAuth sign-in and callback handling.
 
 **Decision:**\
 Modified; implementation prepared for review.
+
+#### 2026-10-11 — Correct OAuth backend origin
+
+**Task / Context:**\
+Investigate the supplied sign-in video, where the Google sign-in link targeted `localhost:8001` and the browser reported `ERR_CONNECTION_REFUSED`.
+
+**AI Output:**\
+Compared the runtime URL in the video with the frontend environment configuration and backend Spring Boot defaults. The backend uses port `8080`; an independent `VITE_AUTH_BASE_URL` could make OAuth point at a different port from the API.
+
+**Student/Team Evaluation:**\
+Pending human review. A live OAuth round-trip still requires the backend, PostgreSQL, and Google OAuth credentials to be running/configured.
+
+**Errors / Risks / Hallucinations:**\
+The video alone cannot establish whether the backend service was running. The current environment has no backend listener, PostgreSQL listener, or Google OAuth credentials, so a live sign-in cannot be completed here.
+
+**Changes Made After Evaluation:**\
+Derived the OAuth origin from `VITE_API_BASE_URL`, removed the independent auth URL setting from the example configuration, documented the local backend prerequisite, and tightened the sign-in test to assert the default port.
+
+**Final Accepted Artifact:**\
+Updated frontend auth URL configuration, environment example, sign-in test, and setup documentation.
+
+**Decision:**\
+Modified; implementation prepared for review.
+
+**Reason:**\
+The video exposed a split-origin configuration that could send OAuth to an inactive port while API requests target the configured backend.
