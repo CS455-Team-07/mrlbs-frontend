@@ -65,7 +65,7 @@ export function LoginPage() {
 
   // ── Member login ─────────────────────────────────────────────────────────────
 
-  function handleMemberLogin(e: React.FormEvent) {
+  async function handleMemberLogin(e: React.FormEvent) {
     e.preventDefault()
     setMemberError('')
     const normalizedEmail = memberEmail.trim().toLowerCase()
@@ -75,8 +75,25 @@ export function LoginPage() {
       return
     }
     const nameToUse = memberName.trim() || normalizedEmail.split('@')[0]
-    login({ email: normalizedEmail, name: nameToUse })
-    navigate('/member', { replace: true })
+
+    try {
+      const res = await fetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, name: nameToUse }),
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        throw new Error('Failed to register member session.')
+      }
+      const memberData = (await res.json()) as { id: string; email: string; name: string }
+      login({ email: memberData.email, name: memberData.name, id: memberData.id })
+      navigate('/member', { replace: true })
+    } catch {
+      // Fallback to local login if backend is unreachable
+      login({ email: normalizedEmail, name: nameToUse })
+      navigate('/member', { replace: true })
+    }
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
