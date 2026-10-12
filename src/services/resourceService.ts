@@ -1,11 +1,14 @@
 
 import type { Resource } from '../types/Resource'
+import { csrfFetch } from './apiClient'
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
 
 export async function getResources(): Promise<Resource[]> {
-  const response = await fetch(`${API_BASE_URL}/resources`)
+  const response = await fetch(`${API_BASE_URL}/resources`, {
+    credentials: 'include',
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to fetch resources: ${response.status}`)
@@ -52,6 +55,7 @@ export async function searchResources(
 
   const response = await fetch(
     `${API_BASE_URL}/resources/search?${params.toString()}`,
+    { credentials: 'include' },
   )
 
   if (!response.ok) {
@@ -67,7 +71,7 @@ export async function searchResources(
 export async function deactivateResource(
   resourceId: string | number,
 ): Promise<void> {
-  const response = await fetch(
+  const response = await csrfFetch(
     `${API_BASE_URL}/resources/${resourceId}`,
     { method: 'DELETE' },
   )
@@ -80,7 +84,9 @@ export async function deactivateResource(
 }
 
 export async function getInactiveResources(): Promise<Resource[]> {
-  const response = await fetch(`${API_BASE_URL}/resources/inactive`)
+  const response = await fetch(`${API_BASE_URL}/resources/inactive`, {
+    credentials: 'include',
+  })
 
   if (!response.ok) {
     throw new Error(
@@ -92,7 +98,7 @@ export async function getInactiveResources(): Promise<Resource[]> {
 }
 
 export async function restoreResource(resourceId: string | number): Promise<void> {
-  const response = await fetch(
+  const response = await csrfFetch(
     `${API_BASE_URL}/resources/${resourceId}/restore`,
     { method: 'PUT' },
   )

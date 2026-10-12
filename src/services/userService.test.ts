@@ -6,12 +6,10 @@ import {
   setActiveUserProfile,
   updateUserProfile,
 } from './userService'
-import { resetAuthorizedAdmins } from '../config/adminConfig'
 
 describe('userService', () => {
   beforeEach(() => {
     clearUserStorage()
-    resetAuthorizedAdmins()
   })
 
   it('creates a member profile for a normal IITK email', () => {
@@ -27,21 +25,21 @@ describe('userService', () => {
 
   it('creates an admin profile for an authorized admin email', () => {
     const profile = handleUserAuthentication({
-      email: 'ananya@iitk.ac.in',
+      email: 'lhc@iitk.ac.in',
     })
 
-    expect(profile.email).toBe('ananya@iitk.ac.in')
+    expect(profile.email).toBe('lhc@iitk.ac.in')
     expect(profile.role).toBe('admin')
-    expect(profile.name).toBe('ananya')
+    expect(profile.name).toBe('lhc')
   })
 
   it('uses the supplied name when authentication provides one', () => {
     const profile = handleUserAuthentication({
-      name: 'Ananya Sharma',
-      email: 'ananya@iitk.ac.in',
+      name: 'LHC Admin',
+      email: 'lhc@iitk.ac.in',
     })
 
-    expect(profile.name).toBe('Ananya Sharma')
+    expect(profile.name).toBe('LHC Admin')
     expect(profile.role).toBe('admin')
   })
 

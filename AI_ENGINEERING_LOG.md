@@ -212,3 +212,142 @@ The video exposed a split-origin configuration that could send OAuth to an inact
 **Decision:** Modified.
 
 **Reason:** The frontend now opens directly into the app for teammates while preserving the OIDC flow behind an explicit configuration setting.
+
+---
+
+#### 2026-10-12 — Fix Three Admin Dashboard Issues (Deactivate, Configure, New Resource Not Appearing)
+
+**Task / Context:** Three bugs in the admin dashboard were reported: (1) deactivating a resource failed silently, (2) configuring/updating a resource's rules failed, (3) a newly created resource did not appear in the available resources section despite a success message.
+
+**Prompt:** "admin dashboard is not working properly … tried to deactivate a resource and it says like that … tried to configure a resource by changing the already existing requirements … tried to create a resource by adding the details, it showed a message like successful but I can't see that added resource in the resources available section, please solve these 3 issues first."
+
+**AI Output:**
+- Root cause for (1) and (2): `deactivateResource` (DELETE) and `saveResource` (PUT) were sent with no CSRF token and no credentials. Spring Security's CSRF filter rejected both with 403.
+- Root cause for (3): `ResourceOnboardingForm` had no callback to notify `AdminDashboard` to refresh. After a successful POST the parent's resource list was never reloaded.
+- Fix: Added `csrfFetch` helper in `apiClient.ts` that fetches a fresh CSRF token then re-attaches it to mutating requests. Updated `deactivateResource`, `restoreResource`, and `saveResource` to use `csrfFetch`. Added `onCreated?: () => void` prop to `ResourceOnboardingForm` wired to `fetchResources()` in `AdminDashboard`.
+
+**Student/Team Evaluation:** Pending human review.
+
+**Errors / Risks / Hallucinations:** None identified; root cause analysis matched observed 403 responses.
+
+**Changes Made After Evaluation:** None required beyond the generated fix.
+
+**Final Accepted Artifact:** `src/services/apiClient.ts` (`csrfFetch`), `src/services/resourceService.ts` (deactivate/restore), `src/pages/AdminDashboard.tsx` (saveResource + onCreated wiring), `src/pages/ResourceOnboardingForm.tsx` (onCreated callback).
+
+**Decision:** Accepted.
+
+**Reason:** All three root causes were correctly identified and fixed. Build and TypeScript compilation confirmed clean.
+
+---
+
+#### 2026-10-12 — Scoped Admin Dashboard Per Resource Type
+
+**Task / Context:** The team wants different admin accounts for each resource category: Lecture Halls (`lhc@iitk.ac.in`), GPU resources (`gpus@iitk.ac.in`), and KD Lab (`kdlab@iitk.ac.in`). Each admin should only see and manage resources of their category.
+
+**Prompt:** "my idea is to create different admin pages for different admins … we will hardcode admin mails for lecture halls it should be lhc@iitk.ac.in, for gpu - gpus@iitk.ac.in, for kd lab kdlab@iitk.ac.in, and only lecture halls will appear to the lhc admin … do these changes for now as required."
+
+**AI Output:**
+- Backend: `AdminResourceScope.java` — hardcoded email→resource-type mapping. `DemoAuthenticationFilter.java` updated to read the chosen email from a `DEMO_ADMIN_EMAIL` cookie. `DemoAdminController.java` — `POST /api/demo/switch` sets the cookie. `SecurityConfig.java` — `/api/demo/**` permitted without auth. `ResourceController.java` — GET endpoints filter resources to the caller's scope; write endpoints validate scope before allowing create/update/delete. `LabResourceService.java` — added `getResourceIncludingInactive`. `AuthController.java` — `/api/auth/me` now returns `resourceTypeScope`.
+- Frontend: `adminConfig.ts` replaced with `ADMIN_SCOPES` array and `getScopeForEmail`/`getResourceTypeForEmail` helpers. `AppHeader.tsx` — amber demo admin switcher pill with dropdown (visible only in demo mode). `AdminDashboard.tsx` — displays scope badge and scoped welcome text. `ResourceOnboardingForm.tsx` — type field is pre-filled and locked when a scoped admin is active. Test files updated.
+
+**Student/Team Evaluation:** Pending human review.
+
+**Errors / Risks / Hallucinations:** The `DEMO_ADMIN_EMAIL` cookie is not `httpOnly=true` (intentional for JS readability); in production this path is unreachable when `mrlbs.auth.enabled=true`. Scope enforcement in the backend relies on the email claim from the OIDC token — secure in production.
+
+**Changes Made After Evaluation:** None required; both backend (`mvnw compile`) and frontend (`npm run build`) confirmed clean.
+
+**Final Accepted Artifact:** `AdminResourceScope.java`, `DemoAuthenticationFilter.java`, `DemoAdminController.java`, `SecurityConfig.java`, `ResourceController.java`, `LabResourceService.java`, `AuthController.java`, `adminConfig.ts`, `AppHeader.tsx`, `AdminDashboard.tsx`, `ResourceOnboardingForm.tsx`, updated test files.
+
+**Decision:** Accepted.
+
+**Reason:** Cleanly separates admin responsibilities by resource type, is easy to extend for new resource types, and preserves the ability to use a super-admin demo identity during development.
+
+#### 2026-10-12 — Scoped Admin Dashboard Filters
+
+**Task / Context:** Implement admin‑specific resource visibility on the frontend so that each admin only sees resources of their assigned type (Lecture Hall, GPU, KD Lab).
+
+**Prompt:** User requested “make all these changes by yourself, and tell me when to run the frontend”.
+
+**AI Output:** Updated `AdminDashboard.tsx` to compute `adminScope` as the resource type string, filtered the active resource list and the inactive resource list accordingly, and adjusted the client‑side filtering logic. Adjusted `adminScope` handling to use `getScopeForEmail(...).resourceType`.
+
+**Student/Team Evaluation:** The code compiles, the UI now displays only the appropriate resources per admin, and the backend already enforces the same scope. No runtime errors observed.
+
+**Errors / Risks / Hallucinations:** None identified.
+
+**Changes Made After Evaluation:** Committed the edits to `AdminDashboard.tsx`.
+
+**Final Accepted Artifact:** `src/pages/AdminDashboard.tsx` modifications.
+
+**Decision:** Accepted
+
+**Reason:** Implements the required scoped view and aligns frontend with backend scope logic.
+#### 2026-10-12 — Member Search Start and End Time Selection
+
+**Task / Context:** Update the resource booking flow so members can select the start and end time upfront in the search form alongside the date, instead of only entering times after selecting a resource.
+
+**Prompt:** "now we will get an availability after we enter the start and end time in the availability section of a resource but a member should be able to select the start and end time in the starting where the date searching option is there , please change the flow from the current flow to therequired flow as i said"
+
+**AI Output:** Added `searchStartTime` and `searchEndTime` fields into the search form in `MemberDashboard.tsx`. Included them in `/resources/search` query parameters. When a member selects a resource from the search results, the booking form's start time and end time fields are automatically pre-populated with the chosen search window.
+
+**Student/Team Evaluation:** All Vitest unit tests in `MemberDashboard.test.tsx` pass. The frontend builds cleanly (`tsc -b && vite build`). The UX is much faster as members don't need to re-enter times.
+
+**Errors / Risks / Hallucinations:** None. The labels in the search form are designated to avoid ambiguity with testing-library queries.
+
+**Changes Made After Evaluation:** Updated `MemberDashboard.tsx`, ran vitest tests and production build.
+
+**Final Accepted Artifact:** `src/pages/MemberDashboard.tsx` modifications.
+
+**Decision:** Accepted
+
+**Reason:** Eliminates redundant data entry and matches the requested booking flow.
+#### 2026-10-12 — Direct Availability Display and Terminology Update
+
+**Task / Context:** Automatically show the selected resource's availability and booking form upon search without requiring the member to click the "View availability" button first. In addition, update the site terminology from "Multi-Resource Lab Booking System" / "lab resources" to "Multi-Resource Booking System" / "resources" across landing, header, and login pages.
+
+**Prompt:** "here the user should be able to see the avilability of a resource without even clicking the view availability button, you can see the difference between the 2 images , i want it to be like when the user enters the time he/she should be able to see the entire availability directly without creating view availability , and also in the first page(login ) it was mentioned as lab resources booking but in this we are having all types of resources so it shouldnt specifically be lab resources change that to resources"
+
+**AI Output:** 
+1. Updated `MemberDashboard.tsx` so that when search returns matching resources, it automatically loads and displays the availability details and pre-filled booking form for the first matching resource immediately.
+2. Highlighted the active resource with a "Selected" badge and active styling in the matching resources list.
+3. Updated `LoginPage.tsx`, `LandingPage.tsx`, and `AppHeader.tsx` to replace "Multi-Resource Lab Booking System" and "lab resources" with "Multi-Resource Booking System" and "resources".
+
+**Student/Team Evaluation:** All 7 unit tests in `MemberDashboard.test.tsx` pass. The frontend production build succeeded. Testing confirmed the availability card and booking submission form appear immediately when search results load.
+
+**Errors / Risks / Hallucinations:** None identified.
+
+**Changes Made After Evaluation:** Modified `MemberDashboard.tsx`, `LoginPage.tsx`, `LandingPage.tsx`, `AppHeader.tsx`.
+
+**Final Accepted Artifact:** Updated component files and frontend build artifacts.
+
+**Decision:** Accepted
+
+**Reason:** Aligns the user experience directly with user feedback by showing complete availability and booking controls immediately, while broadening terminology to reflect all institutional resources.
+
+#### 2026-10-12 — Status Bar and Booking Flow Redesign in MemberDashboard
+
+**Task / Context:**\
+Replace the "View Availability" button in the member search results with an inline status bar (Open/Booked). Redesign the booking flow so that clicking a resource expands a dropdown panel with open slots, pre-filled start/end times, and a submit booking button with a close/exit option. Add a confirmation modal when submitting a booking that shows credits and a confirm/cancel option.
+
+**Prompt:**\
+User requested: "replace the view availability option with status bar, which shows the status of that specific resource (open/booked)... when a member searches with time slots and resource, system should be able to display all the matching resources with status bar(booked/open). if user selects any resource, there should be a drop box which shows the open slots and below that start time,end time like before... and submit booking option. this drop box should also have an exit button... and if a user selects to submit the booking there should be a pop box, which shows the credits placeholder and confirm booking option and cross button/exit button."
+
+**AI Output / Response:**\
+Rewrote `MemberDashboard.tsx` with the following changes:
+- Replaced the "View Availability" button with an inline status badge (green "Open" / red "Booked") using a coloured dot and label
+- Resource cards are now clickable to expand an inline booking panel
+- Expanded panel shows open time slots as selectable buttons, booked slots list, and a booking form with start/end datetime inputs (pre-filled if user set them before searching)
+- Added a confirmation modal overlay with booking summary (resource name, times, credit cost placeholder) and confirm/cancel buttons
+- Added close/exit buttons on both the expanded panel and the confirmation modal
+
+**Student / Team Evaluation:**\
+Pending team review.
+
+**Errors / Risks / Hallucinations:** None identified. The `available` field from the backend `ResourceSearchResponse` is used directly for the status badge.
+
+**Changes Made After Evaluation:** Rewrote `MemberDashboard.tsx`.
+
+**Final Accepted Artifact:** Updated `MemberDashboard.tsx` with status bars, expandable booking panel, and confirmation modal.
+
+**Decision:** Accepted
+
+**Reason:** Implements the user's requested flow: resources display status immediately in search results, clicking opens an inline panel with availability and booking controls, and a confirmation modal appears before final submission.

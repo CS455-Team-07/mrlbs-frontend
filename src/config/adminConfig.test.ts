@@ -1,20 +1,17 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
-  getAuthorizedAdmins,
   isAuthorizedAdmin,
-  resetAuthorizedAdmins,
-  setAuthorizedAdmins,
+  getScopeForEmail,
+  getResourceTypeForEmail,
+  ADMIN_SCOPES,
 } from './adminConfig'
 
 describe('Authorized Administrator Configuration', () => {
-  beforeEach(() => {
-    resetAuthorizedAdmins()
-  })
-
-  it('identifies default authorized administrator identities', () => {
-    expect(isAuthorizedAdmin('ananya@iitk.ac.in')).toBe(true)
-    expect(isAuthorizedAdmin('admin@iitk.ac.in')).toBe(true)
-    expect(isAuthorizedAdmin('ANANYA@IITK.AC.IN')).toBe(true)
+  it('identifies scoped admin emails as authorized', () => {
+    expect(isAuthorizedAdmin('lhc@iitk.ac.in')).toBe(true)
+    expect(isAuthorizedAdmin('gpus@iitk.ac.in')).toBe(true)
+    expect(isAuthorizedAdmin('kdlab@iitk.ac.in')).toBe(true)
+    expect(isAuthorizedAdmin('demo@mrlbs.local')).toBe(true)
   })
 
   it('returns false for non-administrator identities', () => {
@@ -23,10 +20,23 @@ describe('Authorized Administrator Configuration', () => {
     expect(isAuthorizedAdmin('')).toBe(false)
   })
 
-  it('allows dynamic configuration of authorized administrators', () => {
-    setAuthorizedAdmins(['custom.admin@iitk.ac.in'])
-    expect(isAuthorizedAdmin('custom.admin@iitk.ac.in')).toBe(true)
-    expect(isAuthorizedAdmin('ananya@iitk.ac.in')).toBe(false)
-    expect(getAuthorizedAdmins()).toEqual(['custom.admin@iitk.ac.in'])
+  it('returns the correct resource type scope for each admin', () => {
+    expect(getResourceTypeForEmail('lhc@iitk.ac.in')).toBe('Lecture Hall')
+    expect(getResourceTypeForEmail('gpus@iitk.ac.in')).toBe('GPU')
+    expect(getResourceTypeForEmail('kdlab@iitk.ac.in')).toBe('KD Lab')
+    expect(getResourceTypeForEmail('demo@mrlbs.local')).toBeNull()
+  })
+
+  it('getScopeForEmail returns null for super-admin', () => {
+    expect(getScopeForEmail('demo@mrlbs.local')).toBeNull()
+  })
+
+  it('all ADMIN_SCOPES have required fields', () => {
+    for (const scope of ADMIN_SCOPES) {
+      expect(scope.email).toBeTruthy()
+      expect(scope.name).toBeTruthy()
+      expect(scope.resourceType).toBeTruthy()
+      expect(scope.scopeLabel).toBeTruthy()
+    }
   })
 })

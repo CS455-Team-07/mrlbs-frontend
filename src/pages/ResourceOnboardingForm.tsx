@@ -1,10 +1,16 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { apiClientConfig } from '../services/apiClient'
+import { apiClientConfig, csrfFetch } from '../services/apiClient'
 import type { Resource } from '../types/Resource'
+import { useAuth } from '../hooks/useAuth'
+import { getScopeForEmail } from '../config/adminConfig'
 
-export function ResourceOnboardingForm() {
+export function ResourceOnboardingForm({ onCreated }: { onCreated?: () => void } = {}) {
+  const { user } = useAuth()
+  const adminScope = user?.email ? getScopeForEmail(user.email) : null
+  const lockedType = adminScope?.resourceType ?? null
+
   const [name, setName] = useState('')
-  const [type, setType] = useState('')
+  const [type, setType] = useState(lockedType ?? '')
   const [location, setLocation] = useState('')
   const [capacity, setCapacity] = useState('')
   const [minimumDurationHours, setMinimumDurationHours] = useState('1')
@@ -30,28 +36,17 @@ export function ResourceOnboardingForm() {
     setError('')
     setCreatedResource(null)
 
-    try {
-      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, {
-        credentials: 'include',
-      })
-      if (!csrfResponse.ok) {
-        throw new Error('Could not prepare the secure resource request.')
-      }
-      const csrf = (await csrfResponse.json()) as {
-        token: string
-        headerName: string
-      }
+    const finalType = lockedType || type
 
-      const response = await fetch(`${apiClientConfig.baseUrl}/resources`, {
+    try {
+      const response = await csrfFetch(`${apiClientConfig.baseUrl}/resources`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          [csrf.headerName]: csrf.token,
         },
-        credentials: 'include',
         body: JSON.stringify({
           name,
-          type,
+          type: finalType,
           location,
           capacity: capacity ? Number(capacity) : null,
           baseRate: baseRate ? Number(baseRate) : 0,
@@ -75,8 +70,9 @@ export function ResourceOnboardingForm() {
 
       const resource = (await response.json()) as Resource
       setCreatedResource(resource)
+      onCreated?.()
       setName('')
-      setType('')
+      if (!lockedType) setType('')
       setLocation('')
       setCapacity('')
       setMinimumDurationHours('1')
@@ -125,15 +121,24 @@ export function ResourceOnboardingForm() {
           </FormField>
 
           <FormField id="resource-type" label="Type or category">
-            <input
-              className={inputClassName}
-              id="resource-type"
-              maxLength={100}
-              onChange={(event) => setType(event.target.value)}
-              placeholder="For example, Lab, Microscope, or 3D Printer"
-              required
-              value={type}
-            />
+            {lockedType ? (
+              <div className="flex items-center gap-2">
+                <span className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800">
+                  {lockedType}
+                </span>
+                <span className="rounded-full border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">locked</span>
+              </div>
+            ) : (
+              <input
+                className={inputClassName}
+                id="resource-type"
+                maxLength={100}
+                onChange={(event) => setType(event.target.value)}
+                placeholder="For example, Lab, Microscope, or 3D Printer"
+                required
+                value={type}
+              />
+            )}
           </FormField>
 
           <FormField id="resource-location" label="Location">

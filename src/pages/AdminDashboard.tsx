@@ -7,6 +7,8 @@ import {
   getInactiveResources,
   restoreResource,
 } from '../services/resourceService'
+import { csrfFetch } from '../services/apiClient'
+import { getScopeForEmail } from '../config/adminConfig'
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
 type ResourceDraft = {
@@ -33,6 +35,9 @@ const makeDraft = (resource: Resource): ResourceDraft => ({
 })
 export function AdminDashboard() {
   const { user } = useAuth()
+  const adminScope = user?.email ? getScopeForEmail(user.email) : null
+  const requiredType = adminScope?.resourceType ?? null
+
   const [resources, setResources] = useState<Resource[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -45,17 +50,24 @@ export function AdminDashboard() {
   const [inactiveResources, setInactiveResources] = useState<Resource[]>([])
   const [restoringId, setRestoringId] = useState<string | number | null>(null)
   const [restoreError, setRestoreError] = useState('')
+
   const fetchResources = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/resources`)
+      const response = await fetch(`${API_BASE_URL}/resources`, {
+        credentials: 'include',
+      })
       if (!response.ok) {
         throw new Error('Failed to load resources')
       }
       const data = (await response.json()) as Resource[]
-      setResources(data)
+      // Apply admin scope filtering – only show resources matching the admin's assigned type
+      const filtered = requiredType
+        ? data.filter((r) => r.type?.toLowerCase() === requiredType.toLowerCase())
+        : data
+      setResources(filtered)
       setDrafts(
-        Object.fromEntries(data.map((resource) => [resource.id, makeDraft(resource)])),
+        Object.fromEntries(filtered.map((resource) => [resource.id, makeDraft(resource)])),
       )
       setError('')
     } catch (err) {
@@ -69,7 +81,10 @@ export function AdminDashboard() {
   const fetchInactiveResources = async () => {
     try {
       const data = await getInactiveResources()
-      setInactiveResources(data)
+      const filtered = requiredType
+        ? data.filter((r) => r.type?.toLowerCase() === requiredType.toLowerCase())
+        : data
+      setInactiveResources(filtered)
       setRestoreError('')
     } catch (error) {
       console.error('Failed to load inactive resources:', error)
@@ -84,7 +99,7 @@ export function AdminDashboard() {
     }
 
     void loadResources()
-  }, [])
+  }, [requiredType])
 
   const updateDraft = (resourceId: string | number, field: keyof ResourceDraft, value: string | number) => {
     setDrafts((current) => ({
@@ -111,7 +126,7 @@ export function AdminDashboard() {
     try {
       setSavingId(resource.id)
       setSaveError('')
-      const response = await fetch(`${API_BASE_URL}/resources/${resource.id}`, {
+      const response = await csrfFetch(`${API_BASE_URL}/resources/${resource.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -204,11 +219,19 @@ export function AdminDashboard() {
     <section className="my-auto mx-auto w-full max-w-5xl py-6 space-y-6">
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <p className="text-sm font-semibold text-purple-700">Admin area</p>
-        <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">
-          Admin Dashboard
-        </h2>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <h2 className="text-xl font-semibold tracking-tight text-slate-950">Admin Dashboard</h2>
+          {adminScope && (
+            <span className="rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">
+              {adminScope.scopeLabel} only
+            </span>
+          )}
+        </div>
         <p className="mt-3 text-slate-600">
-          Welcome, {user.name}! Review and configure the lab resources currently available in the system.
+          Welcome, {user.name}!
+          {adminScope
+            ? ` You manage ${adminScope.scopeLabel} resources.`
+            : ' Review and configure the lab resources currently available in the system.'}
         </p>
         <div className="mt-6">
           {deactivateError && (
@@ -471,7 +494,7 @@ export function AdminDashboard() {
           </div>
         )}
       </div>
-      <ResourceOnboardingForm />
+      <ResourceOnboardingForm onCreated={() => { void fetchResources() }} />
     </section>
   )
 }
