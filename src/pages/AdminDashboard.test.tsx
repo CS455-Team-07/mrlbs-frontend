@@ -53,6 +53,7 @@ describe('admin resource onboarding form', () => {
       type: ' Microscope ',
       location: 'Science Block, Room 12',
       capacity: 8,
+      baseRate: 0,
       minimumDurationHours: 1,
       maximumContentionMultiplier: 3,
       approvalRequired: false,

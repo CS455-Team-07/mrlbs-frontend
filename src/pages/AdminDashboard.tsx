@@ -36,14 +36,14 @@ export function AdminDashboard() {
   const [resources, setResources] = useState<Resource[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [drafts, setDrafts] = useState<Record<number, ResourceDraft>>({})
-  const [savingId, setSavingId] = useState<number | null>(null)
+  const [editingId, setEditingId] = useState<string | number | null>(null)
+  const [drafts, setDrafts] = useState<Record<string | number, ResourceDraft>>({})
+  const [savingId, setSavingId] = useState<string | number | null>(null)
   const [saveError, setSaveError] = useState('')
-  const [deactivatingId, setDeactivatingId] = useState<number | null>(null)
+  const [deactivatingId, setDeactivatingId] = useState<string | number | null>(null)
   const [deactivateError, setDeactivateError] = useState('')
   const [inactiveResources, setInactiveResources] = useState<Resource[]>([])
-  const [restoringId, setRestoringId] = useState<number | null>(null)
+  const [restoringId, setRestoringId] = useState<string | number | null>(null)
   const [restoreError, setRestoreError] = useState('')
   const fetchResources = async () => {
     try {
@@ -86,7 +86,7 @@ export function AdminDashboard() {
     void loadResources()
   }, [])
 
-  const updateDraft = (resourceId: number, field: keyof ResourceDraft, value: string | number) => {
+  const updateDraft = (resourceId: string | number, field: keyof ResourceDraft, value: string | number) => {
     setDrafts((current) => ({
       ...current,
       [resourceId]: {
@@ -150,7 +150,7 @@ export function AdminDashboard() {
     }
   }
 
-  const handleRestore = async (resourceId: number) => {
+  const handleRestore = async (resourceId: string | number) => {
     try {
       setRestoringId(resourceId)
       setRestoreError('')

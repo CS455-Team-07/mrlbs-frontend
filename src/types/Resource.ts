@@ -7,10 +7,13 @@ export interface BookingRule {
 }
 
 export interface Resource {
-  id: number
+  id: string | number
   name: string
   type?: string
   location?: string
   capacity?: number
   bookingRule?: BookingRule
+  rules?: string[]
+  baseRate?: number
+  minimumDurationHours?: number
 }

@@ -65,7 +65,7 @@ export async function searchResources(
 }
 
 export async function deactivateResource(
-  resourceId: number,
+  resourceId: string | number,
 ): Promise<void> {
   const response = await fetch(
     `${API_BASE_URL}/resources/${resourceId}`,
@@ -91,7 +91,7 @@ export async function getInactiveResources(): Promise<Resource[]> {
   return response.json()
 }
 
-export async function restoreResource(resourceId: number): Promise<void> {
+export async function restoreResource(resourceId: string | number): Promise<void> {
   const response = await fetch(
     `${API_BASE_URL}/resources/${resourceId}/restore`,
     { method: 'PUT' },
@@ -103,7 +103,7 @@ export async function restoreResource(resourceId: number): Promise<void> {
 }
 
 export type CreateBookingRequest = {
-  resourceId: number
+  resourceId: string | number
   startTime: string
   endTime: string
 }

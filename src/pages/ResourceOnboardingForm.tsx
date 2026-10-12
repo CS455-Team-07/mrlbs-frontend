@@ -9,6 +9,7 @@ export function ResourceOnboardingForm() {
   const [capacity, setCapacity] = useState('')
   const [minimumDurationHours, setMinimumDurationHours] = useState('1')
   const [maximumContentionMultiplier, setMaximumContentionMultiplier] = useState('3')
+  const [baseRate, setBaseRate] = useState('0')
   const [approvalRequired, setApprovalRequired] = useState(false)
   const [rules, setRules] = useState([''])
   const [isSaving, setIsSaving] = useState(false)
@@ -53,6 +54,7 @@ export function ResourceOnboardingForm() {
           type,
           location,
           capacity: capacity ? Number(capacity) : null,
+          baseRate: baseRate ? Number(baseRate) : 0,
           minimumDurationHours: Number(minimumDurationHours),
           maximumContentionMultiplier: Number(maximumContentionMultiplier),
           approvalRequired,
@@ -160,6 +162,22 @@ export function ResourceOnboardingForm() {
               placeholder="For example, 20"
               type="number"
               value={capacity}
+            />
+          </FormField>
+
+          <FormField
+            hint="Hourly rate charged to members in credits (default 0 for free resources)."
+            id="base-rate"
+            label="Base credit rate (optional)"
+          >
+            <input
+              className={inputClassName}
+              id="base-rate"
+              min="0"
+              onChange={(event) => setBaseRate(event.target.value)}
+              step="0.01"
+              type="number"
+              value={baseRate}
             />
           </FormField>
 
