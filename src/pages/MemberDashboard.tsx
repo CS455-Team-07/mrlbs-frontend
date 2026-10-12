@@ -1,6 +1,6 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useContext, type FormEvent } from 'react'
 import { apiClientConfig } from '../services/apiClient'
-import { useAuth } from '../hooks/useAuth'
+import { AuthContext } from '../context/authContextInstance'
 
 interface ResourceOption {
   id: string
@@ -12,7 +12,7 @@ interface ResourceOption {
 }
 interface TimeSlot { startTime: string; endTime: string }
 interface Availability { bookedSlots: TimeSlot[]; availableSlots: TimeSlot[] }
-interface BookingResult { id: string; creditCost: number; status: string }
+interface BookingResult { id: string; creditCost: number; status: string; clashes?: boolean }
 interface MemberBooking extends BookingResult {
   startTime: string
   endTime: string
@@ -22,7 +22,8 @@ interface MemberBooking extends BookingResult {
 interface ApiProblem { reasonCode?: string; detail?: string }
 
 export function MemberDashboard() {
-  const { user } = useAuth()
+  const auth = useContext(AuthContext)
+  const user = auth?.user
   const [type, setType] = useState('')
   const [date, setDate] = useState('')
   const [searchStartTime, setSearchStartTime] = useState('')
@@ -48,6 +49,17 @@ export function MemberDashboard() {
   const [rejectionModalReason, setRejectionModalReason] = useState<string | null>(null)
   const [showRejectionModal, setShowRejectionModal] = useState(false)
   const [selectedBookingDetails, setSelectedBookingDetails] = useState<MemberBooking | null>(null)
+
+  const isClashing = Boolean(
+    draftBooking?.clashes ||
+    (availability?.bookedSlots?.some((slot) => {
+      const uStart = new Date(`${date}T${startTime}`).getTime()
+      const uEnd = new Date(`${date}T${endTime}`).getTime()
+      const sStart = new Date(slot.startTime).getTime()
+      const sEnd = new Date(slot.endTime).getTime()
+      return !isNaN(uStart) && !isNaN(uEnd) && !isNaN(sStart) && !isNaN(sEnd) && uStart < sEnd && uEnd > sStart
+    }))
+  )
 
   // Auto-sync member session and auto-load bookings on mount
   useEffect(() => {
@@ -137,7 +149,13 @@ export function MemberDashboard() {
     try {
       const response = await fetch(`${apiClientConfig.baseUrl}/resources/${resource.id}/availability?date=${date}`, { credentials: 'include' })
       if (!response.ok) throw new Error('Availability could not be loaded.')
-      setAvailability((await response.json()) as Availability)
+      const avail = (await response.json()) as Availability
+      setAvailability(avail)
+      if (!searchStartTime || !searchEndTime) {
+        setResources((current) =>
+          current.map((r) => (r.id === resource.id ? { ...r, available: avail.availableSlots.length > 0 } : r))
+        )
+      }
     } catch (availabilityError) {
       setError(availabilityError instanceof Error ? availabilityError.message : 'Availability could not be loaded.')
     }
@@ -191,6 +209,26 @@ export function MemberDashboard() {
     } finally { setLoading(false) }
   }
 
+  async function cancelDraft(bookingId?: string) {
+    const idToDelete = bookingId || draftBooking?.id
+    setShowConfirmModal(false)
+    setDraftBooking(null)
+    if (idToDelete) {
+      try {
+        const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
+        const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
+        await fetch(`${apiClientConfig.baseUrl}/bookings/${idToDelete}`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: { [csrf.headerName]: csrf.token },
+        })
+      } catch (err) {
+        console.warn('Could not delete draft on cancel', err)
+      }
+      void loadBookings()
+    }
+  }
+
   async function confirmBooking() {
     if (!draftBooking) return
     setConfirmLoading(true)
@@ -221,7 +259,7 @@ export function MemberDashboard() {
         if (!response.ok) {
           const retryProblem = (await response.json().catch(() => null)) as ApiProblem | null
           const msg = getFriendlyErrorMessage(retryProblem || problem)
-          setShowConfirmModal(false)
+          await cancelDraft(draftBooking.id)
           setRejectionModalReason(msg)
           setShowRejectionModal(true)
           return
@@ -233,7 +271,11 @@ export function MemberDashboard() {
       setDraftBooking(null)
       void loadBookings()
     } catch (submissionError) {
-      setShowConfirmModal(false)
+      if (draftBooking) {
+        await cancelDraft(draftBooking.id)
+      } else {
+        setShowConfirmModal(false)
+      }
       const msg = submissionError instanceof Error ? submissionError.message : 'The booking could not be confirmed.'
       setRejectionModalReason(msg)
       setShowRejectionModal(true)
@@ -246,7 +288,8 @@ export function MemberDashboard() {
     try {
       const response = await fetch(`${apiClientConfig.baseUrl}/bookings`, { credentials: 'include' })
       if (!response.ok) throw new Error('Your bookings could not be loaded.')
-      setMemberBookings((await response.json()) as MemberBooking[])
+      const data = (await response.json().catch(() => null)) as unknown
+      setMemberBookings(Array.isArray(data) ? (data as MemberBooking[]) : [])
     } catch (historyError) {
       setError(historyError instanceof Error ? historyError.message : 'Your bookings could not be loaded.')
     } finally { setLoading(false) }
@@ -295,8 +338,17 @@ export function MemberDashboard() {
         if (problem?.reasonCode === 'BOOKING_NOT_MODIFIABLE') throw new Error('This booking can no longer be cancelled.')
         throw new Error(problem?.detail ?? 'The booking could not be cancelled.')
       }
-      const cancelled = (await response.json()) as MemberBooking
-      setMemberBookings((current) => current.map((bookingItem) => bookingItem.id === cancelled.id ? cancelled : bookingItem))
+      if (response.status === 204) {
+        setMemberBookings((current) => current.filter((bookingItem) => bookingItem.id !== memberBooking.id))
+      } else {
+        const cancelled = (await response.json().catch(() => null)) as MemberBooking | null
+        if (cancelled) {
+          setMemberBookings((current) => current.map((bookingItem) => bookingItem.id === cancelled.id ? cancelled : bookingItem))
+        } else {
+          setMemberBookings((current) => current.filter((bookingItem) => bookingItem.id !== memberBooking.id))
+        }
+      }
+      void loadBookings()
     } catch (cancellationError) {
       setError(cancellationError instanceof Error ? cancellationError.message : 'The booking could not be cancelled.')
     } finally { setLoading(false) }
@@ -306,7 +358,8 @@ export function MemberDashboard() {
 
   // Group bookings by date
   const bookingsByDate: Record<string, MemberBooking[]> = {}
-  memberBookings.forEach((b) => {
+  ;(Array.isArray(memberBookings) ? memberBookings : []).forEach((b) => {
+    if (!b?.startTime) return
     const bookingDate = b.startTime.slice(0, 10)
     if (!bookingsByDate[bookingDate]) {
       bookingsByDate[bookingDate] = []
@@ -398,7 +451,7 @@ export function MemberDashboard() {
                 {/* Open slots */}
                 {availability && (
                   <>
-                    <h4 className="mb-3 text-sm font-semibold text-slate-800">Open slots on {date}</h4>
+                    <h4 className="mb-3 text-sm font-semibold text-slate-800">Open slots</h4>
                     {availability.availableSlots.length > 0 ? (
                       <div className="mb-5 flex flex-wrap gap-2">
                         {availability.availableSlots.map((slot) => (
@@ -444,7 +497,15 @@ export function MemberDashboard() {
                     </label>
                   </div>
                   {error && <p aria-live="polite" className="rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800" role="alert">{error}</p>}
-                  {booking && <p aria-live="polite" className="rounded-lg bg-emerald-50 p-3 text-sm font-medium text-emerald-800" role="status">Booking confirmed! Cost: {booking.creditCost} credits.</p>}
+                  {booking && (
+                    <p
+                      aria-live="polite"
+                      className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800"
+                      role="status"
+                    >
+                      {booking.status === 'IN_PROGRESS' ? 'Booking submitted!' : 'Booking confirmed!'} Cost: {booking.creditCost} credits.
+                    </p>
+                  )}
                   <div className="flex justify-end gap-3">
                     <button
                       type="button"
@@ -468,11 +529,11 @@ export function MemberDashboard() {
 
       {/* ── Confirmation Modal (FR-5.1: Draft Review & Pricing Preview) ── */}
       {showConfirmModal && selectedResource && draftBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowConfirmModal(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => void cancelDraft()}>
           <div className="relative mx-4 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
-              onClick={() => setShowConfirmModal(false)}
+              onClick={() => void cancelDraft()}
               className="absolute top-3 right-3 grid size-8 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
               aria-label="Close confirmation"
             >
@@ -483,6 +544,12 @@ export function MemberDashboard() {
               <span className="grid size-10 place-items-center rounded-xl bg-blue-700 text-lg text-white">📋</span>
               <h3 className="text-xl font-semibold text-slate-900">Review & Confirm Booking</h3>
             </div>
+
+            {isClashing && (
+              <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-sm font-medium text-amber-900">
+                <p>it clashes with the already booked slot, it may not get booked,</p>
+              </div>
+            )}
 
             <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
               <div className="flex justify-between">
@@ -499,8 +566,10 @@ export function MemberDashboard() {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Status</span>
-                <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
-                  DRAFT (Unreserved)
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                  isClashing ? 'bg-amber-100 text-amber-800' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {isClashing ? 'WILL BE IN_PROGRESS' : 'DRAFT (Unreserved)'}
                 </span>
               </div>
               <div className="flex justify-between border-t border-slate-200 pt-3">
@@ -510,13 +579,15 @@ export function MemberDashboard() {
             </div>
 
             <p className="mt-3 text-xs text-slate-500">
-              Slots are not held and credits are not deducted while in draft. On confirmation, the slot will be locked and credits will be debited.
+              {isClashing
+                ? 'Because this time window overlaps with an already booked slot, confirming will submit your request with status IN_PROGRESS.'
+                : 'Slots are not held and credits are not deducted while in draft. On confirmation, the slot will be locked and credits will be debited.'}
             </p>
 
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setShowConfirmModal(false)}
+                onClick={() => void cancelDraft()}
                 className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Cancel
@@ -707,7 +778,7 @@ export function MemberDashboard() {
                               Change time
                             </button>
                           )}
-                          {['CONFIRMED', 'PENDING_APPROVAL'].includes(memberBooking.status) && (
+                          {['CONFIRMED', 'PENDING', 'PENDING_APPROVAL'].includes(memberBooking.status) && (
                             <button
                               className="rounded-lg border border-red-300 bg-white px-2.5 py-1 text-xs font-semibold text-red-800 transition hover:bg-red-50 disabled:opacity-60"
                               disabled={loading}
@@ -721,6 +792,8 @@ export function MemberDashboard() {
                             className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${
                               memberBooking.status === 'CONFIRMED'
                                 ? 'bg-emerald-100 text-emerald-800'
+                                : memberBooking.status === 'PENDING' || memberBooking.status === 'PENDING_APPROVAL'
+                                ? 'bg-amber-100 text-amber-800'
                                 : memberBooking.status === 'DRAFT'
                                 ? 'bg-amber-100 text-amber-800'
                                 : 'bg-slate-200 text-slate-700'
@@ -761,7 +834,12 @@ export function MemberDashboard() {
 }
 
 function formatSlot(slot: TimeSlot) {
-  return `${slot.startTime.replace('T', ' ').slice(0, 16)} to ${slot.endTime.replace('T', ' ').slice(0, 16)}`
+  const start = slot.startTime.slice(11, 16)
+  let end = slot.endTime.slice(11, 16)
+  if (end === '00:00' && slot.endTime.slice(0, 10) !== slot.startTime.slice(0, 10)) {
+    end = '24:00'
+  }
+  return `${start} to ${end}`
 }
 
 const inputClassName = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 focus:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-100'
