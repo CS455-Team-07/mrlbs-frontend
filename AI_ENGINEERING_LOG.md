@@ -351,3 +351,24 @@ Pending team review.
 **Decision:** Accepted
 
 **Reason:** Implements the user's requested flow: resources display status immediately in search results, clicking opens an inline panel with availability and booking controls, and a confirmation modal appears before final submission.
+
+#### 2026-10-12 — Min and Max Duration Option During Resource Onboarding
+
+**Task / Context:** Enable administrators to specify minimum and maximum booking durations (in minutes), buffer time, and max bookings per member when creating a resource through `ResourceOnboardingForm.tsx`, ensuring parity with the configuration fields in `AdminDashboard.tsx`.
+
+**Prompt:** "in the admin pages , when admin is adding a resource ther e is no option for min max duration but when admin is configuring the resources , it is clearly visible that there is min max duration , so now admin should be able to add the min max duration while adding resource as well , please implement this correctly"
+
+**AI Output / Response:** Added form fields in `ResourceOnboardingForm.tsx` for `Min duration (minutes)` (default 30), `Max duration (minutes)` (default 180), `Buffer time (minutes)` (default 15), and `Max bookings per member` (default 3). Implemented client-side validation to ensure `minDurationMinutes > 0`, `maxDurationMinutes > 0`, and `minDurationMinutes <= maxDurationMinutes`. Included both flat duration fields and nested `bookingRule` object in the POST payload to `/resources`. Fixed `AuthContext` import to prevent unhandled exceptions during standalone component testing. Added test coverage in `AdminDashboard.test.tsx`.
+
+**Student / Team Evaluation:** All 5 tests in `AdminDashboard.test.tsx` pass. Production build (`npm run build`) succeeded without type errors or bundle issues.
+
+**Errors / Risks / Hallucinations:** Identified that `AdminDashboard.test.tsx` tested `ResourceOnboardingForm` without an `AuthProvider`, which previously caused a runtime error when using `useAuth()`; resolved by safely reading from `AuthContext` directly.
+
+**Changes Made After Evaluation:** Modified `ResourceOnboardingForm.tsx` and updated `AdminDashboard.test.tsx`.
+
+**Final Accepted Artifact:** Updated `ResourceOnboardingForm.tsx` and `AdminDashboard.test.tsx`.
+
+**Decision:** Accepted
+
+**Reason:** Admins can now configure min/max durations upfront when adding resources instead of having to configure them in a second step.
+

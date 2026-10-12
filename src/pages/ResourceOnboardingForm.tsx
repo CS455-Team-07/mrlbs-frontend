@@ -1,11 +1,12 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useContext, useState, type FormEvent, type ReactNode } from 'react'
 import { apiClientConfig, csrfFetch } from '../services/apiClient'
 import type { Resource } from '../types/Resource'
-import { useAuth } from '../hooks/useAuth'
+import { AuthContext } from '../context/authContextInstance'
 import { getScopeForEmail } from '../config/adminConfig'
 
 export function ResourceOnboardingForm({ onCreated }: { onCreated?: () => void } = {}) {
-  const { user } = useAuth()
+  const authContext = useContext(AuthContext)
+  const user = authContext?.user ?? null
   const adminScope = user?.email ? getScopeForEmail(user.email) : null
   const lockedType = adminScope?.resourceType ?? null
 
@@ -16,6 +17,10 @@ export function ResourceOnboardingForm({ onCreated }: { onCreated?: () => void }
   const [minimumDurationHours, setMinimumDurationHours] = useState('1')
   const [maximumContentionMultiplier, setMaximumContentionMultiplier] = useState('3')
   const [baseRate, setBaseRate] = useState('0')
+  const [minDurationMinutes, setMinDurationMinutes] = useState('30')
+  const [maxDurationMinutes, setMaxDurationMinutes] = useState('180')
+  const [bufferTimeMinutes, setBufferTimeMinutes] = useState('15')
+  const [maxBookingsPerMember, setMaxBookingsPerMember] = useState('3')
   const [approvalRequired, setApprovalRequired] = useState(false)
   const [rules, setRules] = useState([''])
   const [isSaving, setIsSaving] = useState(false)
@@ -36,6 +41,27 @@ export function ResourceOnboardingForm({ onCreated }: { onCreated?: () => void }
     setError('')
     setCreatedResource(null)
 
+    const parsedMin = Number(minDurationMinutes)
+    const parsedMax = Number(maxDurationMinutes)
+
+    if (parsedMin <= 0) {
+      setError('Minimum duration must be greater than 0.')
+      setIsSaving(false)
+      return
+    }
+
+    if (parsedMax <= 0) {
+      setError('Maximum duration must be greater than 0.')
+      setIsSaving(false)
+      return
+    }
+
+    if (parsedMin > parsedMax) {
+      setError('Minimum duration cannot be greater than maximum duration.')
+      setIsSaving(false)
+      return
+    }
+
     const finalType = lockedType || type
 
     try {
@@ -52,6 +78,17 @@ export function ResourceOnboardingForm({ onCreated }: { onCreated?: () => void }
           baseRate: baseRate ? Number(baseRate) : 0,
           minimumDurationHours: Number(minimumDurationHours),
           maximumContentionMultiplier: Number(maximumContentionMultiplier),
+          minDurationMinutes: parsedMin,
+          maxDurationMinutes: parsedMax,
+          bufferTimeMinutes: Number(bufferTimeMinutes),
+          maxBookingsPerMember: Number(maxBookingsPerMember),
+          bookingRule: {
+            bookingPolicy: approvalRequired ? 'APPROVAL_REQUIRED' : 'OPEN',
+            minDurationMinutes: parsedMin,
+            maxDurationMinutes: parsedMax,
+            bufferTimeMinutes: Number(bufferTimeMinutes),
+            maxBookingsPerMember: Number(maxBookingsPerMember),
+          },
           approvalRequired,
           rules: rules.map((rule) => rule.trim()).filter(Boolean),
         }),
@@ -77,6 +114,10 @@ export function ResourceOnboardingForm({ onCreated }: { onCreated?: () => void }
       setCapacity('')
       setMinimumDurationHours('1')
       setMaximumContentionMultiplier('3')
+      setMinDurationMinutes('30')
+      setMaxDurationMinutes('180')
+      setBufferTimeMinutes('15')
+      setMaxBookingsPerMember('3')
       setApprovalRequired(false)
       setRules([''])
     } catch (submissionError) {
@@ -209,6 +250,52 @@ export function ResourceOnboardingForm({ onCreated }: { onCreated?: () => void }
               step="0.01"
               type="number"
               value={maximumContentionMultiplier}
+            />
+          </FormField>
+
+          <FormField hint="Shortest booking slot allowed in minutes (default 30)." id="min-duration-minutes" label="Min duration (minutes)">
+            <input
+              className={inputClassName}
+              id="min-duration-minutes"
+              min="1"
+              onChange={(event) => setMinDurationMinutes(event.target.value)}
+              required
+              type="number"
+              value={minDurationMinutes}
+            />
+          </FormField>
+
+          <FormField hint="Longest booking slot allowed in minutes (default 180)." id="max-duration-minutes" label="Max duration (minutes)">
+            <input
+              className={inputClassName}
+              id="max-duration-minutes"
+              min="1"
+              onChange={(event) => setMaxDurationMinutes(event.target.value)}
+              required
+              type="number"
+              value={maxDurationMinutes}
+            />
+          </FormField>
+
+          <FormField hint="Turnaround buffer time between bookings in minutes (default 15)." id="buffer-time-minutes" label="Buffer time (minutes)">
+            <input
+              className={inputClassName}
+              id="buffer-time-minutes"
+              min="0"
+              onChange={(event) => setBufferTimeMinutes(event.target.value)}
+              type="number"
+              value={bufferTimeMinutes}
+            />
+          </FormField>
+
+          <FormField hint="Maximum active bookings allowed per member (default 3)." id="max-bookings-per-member" label="Max bookings per member">
+            <input
+              className={inputClassName}
+              id="max-bookings-per-member"
+              min="1"
+              onChange={(event) => setMaxBookingsPerMember(event.target.value)}
+              type="number"
+              value={maxBookingsPerMember}
             />
           </FormField>
         </div>

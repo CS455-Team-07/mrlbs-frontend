@@ -56,6 +56,17 @@ describe('admin resource onboarding form', () => {
       baseRate: 0,
       minimumDurationHours: 1,
       maximumContentionMultiplier: 3,
+      minDurationMinutes: 30,
+      maxDurationMinutes: 180,
+      bufferTimeMinutes: 15,
+      maxBookingsPerMember: 3,
+      bookingRule: {
+        bookingPolicy: 'OPEN',
+        minDurationMinutes: 30,
+        maxDurationMinutes: 180,
+        bufferTimeMinutes: 15,
+        maxBookingsPerMember: 3,
+      },
       approvalRequired: false,
       rules: ['Book for up to two hours'],
     })
@@ -133,5 +144,37 @@ describe('admin resource onboarding form', () => {
 
     await screen.findByRole('status')
     expect(JSON.parse(fetchMock.mock.calls[1][1].body as string).approvalRequired).toBe(true)
+  })
+
+  it('allows customizing min and max duration when onboarding a resource', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'csrf', headerName: 'X-CSRF-TOKEN' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'High-Performance Cluster' }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ResourceOnboardingForm />)
+    await user.type(screen.getByLabelText('Resource name'), 'High-Performance Cluster')
+    await user.type(screen.getByLabelText('Type or category'), 'Compute')
+    await user.type(screen.getByLabelText('Location'), 'CC Building')
+    await user.type(screen.getByLabelText('Rule 1'), 'Maximum 1 job at a time')
+
+    await user.clear(screen.getByLabelText('Min duration (minutes)'))
+    await user.type(screen.getByLabelText('Min duration (minutes)'), '60')
+
+    await user.clear(screen.getByLabelText('Max duration (minutes)'))
+    await user.type(screen.getByLabelText('Max duration (minutes)'), '360')
+
+    await user.click(screen.getByRole('button', { name: 'Save resource' }))
+
+    await screen.findByRole('status')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toMatchObject({
+      minDurationMinutes: 60,
+      maxDurationMinutes: 360,
+      bookingRule: {
+        minDurationMinutes: 60,
+        maxDurationMinutes: 360,
+      },
+    })
   })
 })
