@@ -54,8 +54,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setActiveUserProfile(null)
     currentUser.current = null
     setUser(null)
-    // Also clear the backend demo-admin cookie so the next login starts fresh
+    // Clear both demo-identity cookies so neither a stale admin nor a stale
+    // member session can bleed into the next login.
     document.cookie = 'DEMO_ADMIN_EMAIL=; path=/; max-age=0'
+    document.cookie = 'DEMO_MEMBER_EMAIL=; path=/; max-age=0'
   }
 
   const updateProfile = (

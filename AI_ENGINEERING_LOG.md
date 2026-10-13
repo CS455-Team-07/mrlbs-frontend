@@ -432,3 +432,54 @@ Pending team review.
 **Reason:** User approved mail sending as a practical authentication workaround.
 
 **Verification update:** The final focused auth/navigation run passes 6 tests and the production build passes. The full frontend suite reports 25 passing tests and 7 pre-existing failures in MemberDashboard.test.tsx, where the tests expect a separate “View availability” control and booking text that the current page does not render. No SMTP delivery test was possible because there are no SMTP settings in the workspace environment.
+
+---
+
+#### 2026-10-13 � Fix admin resource onboarding blocked by demo cookie conflict (403 Forbidden)
+
+**Date:** 2026-10-13
+
+**Task / Context:**
+Admin users (e.g. `lhc@iitk.ac.in`) were receiving `Only an Admin can onboard a resource.` (HTTP 403) when submitting the Resource Onboarding Form, even after successfully logging in via the Admin Login flow.
+
+**Prompt:**
+`why i am unable to book a resource, why am i getting like this, dont change any code just give me reason` (diagnosis request); followed by `to onboard a resource only, i am currently in lhc admin but couldnot onboard a resource, make changes such that resource onboarding by admins happens successfully.`
+
+**AI Output / Response:**
+Fixed three interlocking bugs: (1) `AuthContext.tsx` logout now clears both `DEMO_ADMIN_EMAIL` and `DEMO_MEMBER_EMAIL` cookies. (2) `LoginPage.tsx` handleAdminLogin clears `DEMO_MEMBER_EMAIL` before calling the backend /api/demo/switch endpoint, preventing the stale member cookie from shadowing the new admin identity. Corresponding backend fixes in `AuthController.java` and `DemoAuthenticationFilter.java` ensure `DEMO_ADMIN_EMAIL` is always checked first.
+
+**Student / Team Evaluation:**
+Pending human review.
+
+**Errors / Risks / Hallucinations:**
+No hallucinations. The fix is scoped to the demo-auth path; production (`mrlbs.auth.enabled=true`) is unaffected.
+
+**Changes Made After Evaluation:**
+`AuthContext.tsx`, `LoginPage.tsx` (frontend); `AuthController.java`, `DemoAuthenticationFilter.java` (backend).
+
+**Final Accepted Artifact:**
+Admin resource onboarding now succeeds from the frontend form when logged in as any scoped admin (LHC, GPU, KD Lab).
+
+**Decision:** Pending human review.
+
+**Reason:** Bug fix � demo-mode cookie priority and cleanup corrected; no change to production auth or resource creation logic.
+
+#### 2026-10-13 — Merge latest main into authentication branches
+
+**Task / Context:** The user asked to update both repositories from the latest `main` and resolve conflicts in their branches.
+
+**Prompt:** “now pull the latest version of main for both backend and frontend” followed by “and then resolve the merge conflicts of my branches”.
+
+**AI Output / Response:** Merged the latest `origin/main` changes into the `authentication` branch in each repository and resolved overlapping login, member dashboard, and engineering-log changes while preserving both feature sets.
+
+**Student / Team Evaluation:** The user reports that the email-code flow was tested with a real IITK account and works. No tests were rerun after this merge.
+
+**Errors / Risks / Hallucinations:** The full frontend suite previously had seven `MemberDashboard.test.tsx` failures; these have not been rerun after merging main.
+
+**Changes Made After Evaluation:** Kept the email-code sign-in UI and CSRF-aware member requests while incorporating the AI assistant and latest dashboard changes.
+
+**Final Accepted Artifact / Output:** Updated local `authentication` branches in both repositories; no remote push has been made yet.
+
+**Decision:** Modified.
+
+**Reason:** Resolve conflicts while retaining the verified institutional mailbox flow and latest mainline work.
