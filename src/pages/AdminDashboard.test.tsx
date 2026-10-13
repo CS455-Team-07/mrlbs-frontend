@@ -61,7 +61,7 @@ describe('admin resource onboarding form', () => {
       bufferTimeMinutes: 15,
       maxBookingsPerMember: 3,
       bookingRule: {
-        bookingPolicy: 'OPEN',
+        bookingPolicy: 'FCFS',
         minDurationMinutes: 30,
         maxDurationMinutes: 180,
         bufferTimeMinutes: 15,

@@ -53,8 +53,7 @@ export function clearCsrfTokenCache(): void {
 
 /**
  * Performs a mutating fetch (DELETE, PUT, POST, PATCH) with the cached CSRF token
- * attached and credentials included. If the backend rejects with 403, it refreshes
- * the token once and retries automatically.
+ * attached and credentials included.
  */
 export async function csrfFetch(
   url: string,
@@ -62,7 +61,7 @@ export async function csrfFetch(
 ): Promise<Response> {
   const csrf = await getCsrfToken()
 
-  let response = await fetch(url, {
+  return fetch(url, {
     ...options,
     credentials: 'include',
     headers: {
@@ -70,20 +69,5 @@ export async function csrfFetch(
       [csrf.headerName]: csrf.token,
     },
   })
-
-  // If session rotated or token expired, invalidate cache and retry once
-  if (response.status === 403) {
-    clearCsrfTokenCache()
-    const freshCsrf = await getCsrfToken(true)
-    response = await fetch(url, {
-      ...options,
-      credentials: 'include',
-      headers: {
-        ...(options.headers ?? {}),
-        [freshCsrf.headerName]: freshCsrf.token,
-      },
-    })
-  }
-
-  return response
 }
+
