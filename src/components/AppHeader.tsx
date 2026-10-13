@@ -21,8 +21,7 @@ export function AppHeader() {
     }`
 
   function handleLogout() {
-    logout()
-    navigate('/login', { replace: true })
+    void logout().finally(() => navigate('/login', { replace: true }))
   }
 
   return (

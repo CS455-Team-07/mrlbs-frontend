@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, type FormEvent } from 'react'
-import { apiClientConfig } from '../services/apiClient'
+import { apiClientConfig, csrfFetch } from '../services/apiClient'
 import { AuthContext } from '../context/authContextInstance'
 
 interface ResourceOption {
@@ -66,7 +66,7 @@ export function MemberDashboard() {
     async function initMemberSession() {
       if (user?.email) {
         try {
-          await fetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
+          await csrfFetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: user.email, name: user.name }),
@@ -75,8 +75,8 @@ export function MemberDashboard() {
         } catch (e) {
           console.warn('Could not sync member session with backend', e)
         }
+        void loadBookings()
       }
-      void loadBookings()
     }
     void initMemberSession()
   }, [user?.email, user?.name])
@@ -179,7 +179,7 @@ export function MemberDashboard() {
         const problem = (await response.json().catch(() => null)) as ApiProblem | null
         if (problem?.detail?.includes('Authenticated member identity is required') && user?.email) {
           // Re-sync session cookie with backend and retry once
-          await fetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
+          await csrfFetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: user.email, name: user.name }),
@@ -245,7 +245,7 @@ export function MemberDashboard() {
         const problem = (await response.json().catch(() => null)) as ApiProblem | null
         if (problem?.detail?.includes('Authenticated member identity is required') && user?.email) {
           // Re-sync session cookie with backend and retry once
-          await fetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
+          await csrfFetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: user.email, name: user.name }),

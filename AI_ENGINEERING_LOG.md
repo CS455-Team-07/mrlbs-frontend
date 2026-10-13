@@ -372,3 +372,63 @@ Pending team review.
 
 **Reason:** Admins can now configure min/max durations upfront when adding resources instead of having to configure them in a second step.
 
+#### 2026-10-13 — Restore IITK Google OIDC authentication
+
+**Task / Context:** The user requested latest `main` as the base for new `authentication` branches in both repositories, a working authentication path for IITK accounts, and no push before successful testing.
+
+**Prompt:** "pull the latest versions of main for both frontend and backend and create a new branch on authentication and we need to find an alternative to make authentication work and also dont push until you have tested that authentication works and keep in mind that the accounts are .iitk.ac.in accounts and plan accordingly"
+
+**AI Output / Response:** Replaced typed-email login with the backend Google OAuth 2.0 / OIDC flow and configured it as the normal frontend behavior.
+
+**Student / Team Evaluation:** Pending. Production build passed. OIDC-focused frontend tests pass; the full frontend run has 7 existing `MemberDashboard` test failures because the current resource card is selectable directly while tests expect a separate "View availability" button. The live Google authorization redirect was verified, but the IITK account callback still needs a user sign-in.
+
+**Errors / Risks / Hallucinations:** A successful Google sign-in must still produce the configured Workspace hosted-domain claim. The email suffix is also checked but is not used as a replacement for Google organization validation. Authentication has not yet been confirmed end to end with an IITK account.
+
+**Changes Made After Evaluation:** Set the Google OAuth entry link and callback handling as the normal sign-in route, removed the insecure typed-email login choices, and clarified local environment requirements.
+
+**Final Accepted Artifact:** Local frontend implementation on the `authentication` branch; not pushed.
+
+**Decision:** Modified.
+
+**Reason:** The frontend now hands identity verification to Google and only creates a local profile after the backend verifies the institutional OIDC session.
+
+#### 2026-10-13 — Switch institutional sign-in to Microsoft Entra
+
+**Task / Context:** The user confirmed they can sign in to Microsoft 365 with the IITK account, while Google says the account cannot be found. They authorized finding an alternative and asked that nothing be pushed before authentication is tested.
+
+**AI Output / Response:** Changed the login link and callback handling to use the backend's Microsoft Entra OIDC registration, with provider-specific success and failure messages.
+
+**Student / Team Evaluation:** 8 focused frontend authentication tests passed and the production build passed. The end-to-end provider callback is pending a Microsoft Entra app registration and local client credentials.
+
+**Errors / Risks / Hallucinations:** The frontend only creates a local profile after `/api/auth/me` returns the backend-verified institutional identity. The frontend domain check supplements backend tenant and domain validation; it does not replace it.
+
+**Changes Made After Evaluation:** Updated the sign-in URL, identity-check messages, authentication tests, and README. No commits or pushes were made.
+
+**Final Accepted Artifact:** Local frontend implementation on the `authentication` branch; provider sign-in awaits Entra application credentials.
+
+**Decision:** Pending real sign-in.
+
+**Reason:** Microsoft 365 is the institutional identity the user can access; Google does not recognize this address.
+
+
+#### 2026-10-13 — Switch login to IITK mailbox verification
+
+**Task / Context:** The user could not proceed through Microsoft OAuth because the institutional tenant requires admin approval and approved email delivery as an alternative.
+
+**Prompt:** "yeah the mail sending thing is better"
+
+**AI Output / Response:** Replaced the Microsoft sign-in link with a two-step institutional email/code form. On application load, the frontend now verifies `/api/auth/me` before restoring a cached profile; after entering the code it creates a profile only from a successful backend response.
+
+**Student / Team Evaluation:** Pending user review and a real SMTP test. Focused auth and route tests passed (5 tests); the production build passed. Full frontend test suite still has 7 unrelated existing MemberDashboard failures where test expectations do not match the current interface.
+
+**Errors / Risks / Hallucinations:** This is mailbox possession verification and does not satisfy the originally specified Google OAuth/OIDC authentication mechanism. It requires an operational SMTP relay, which has not been configured or tested with a real recipient.
+
+**Changes Made After Evaluation:** Replaced Microsoft-specific text and callback logic with email/code form interactions, added focused UI tests, and made server session validation authoritative over local profile cache.
+
+**Final Accepted Artifact:** Local frontend implementation on the existing `authentication` branch. No commits or pushes were made. Real email delivery still needs SMTP configuration.
+
+**Decision:** Modified.
+
+**Reason:** User approved mail sending as a practical authentication workaround.
+
+**Verification update:** The final focused auth/navigation run passes 6 tests and the production build passes. The full frontend suite reports 25 passing tests and 7 pre-existing failures in MemberDashboard.test.tsx, where the tests expect a separate “View availability” control and booking text that the current page does not render. No SMTP delivery test was possible because there are no SMTP settings in the workspace environment.

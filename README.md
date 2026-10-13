@@ -48,14 +48,13 @@ Copy `.env.example` to `.env` and set the Vite environment variables needed for 
 
 ```env
 VITE_API_BASE_URL=http://localhost:8080/api
-VITE_AUTH_ENABLED=false
 ```
 
-Authentication is turned off by default for the current project demo. The frontend uses a demo administrator profile and expects the backend to run with authentication disabled too. Set `VITE_AUTH_ENABLED=true` to restore the Google sign-in flow; the backend must also be configured with `AUTH_ENABLED=true` and valid Google OAuth credentials. `VITE_API_BASE_URL` configures API calls and Google OAuth redirects from the same backend.
+Institutional email one-time-code sign-in is enabled by default. The backend must run with `AUTH_ENABLED=true` and configured SMTP delivery. Only `@iitk.ac.in` addresses are accepted, and the frontend verifies the server session before restoring a cached profile. `VITE_API_BASE_URL` configures API calls to the backend.
 
 ## Current status
 
-The Google OIDC flow remains available when authentication is enabled. Booking and user-profile workflows remain future work.
+Mailbox verification is the normal sign-in flow. It is a practical workaround for users who cannot complete OAuth consent; possession of an `@iitk.ac.in` mailbox is the identity check. Booking and user-profile workflows remain future work.
 
 ## AI Engineering Log
 

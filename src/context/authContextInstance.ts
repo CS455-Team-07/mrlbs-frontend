@@ -7,7 +7,7 @@ export interface AuthContextType {
   role: UserRole | null
   isAuthenticated: boolean
   login: (identity: AuthenticatedIdentity) => UserProfile
-  logout: () => void
+  logout: () => Promise<void>
   updateProfile: (updates: Partial<Pick<UserProfile, 'name' | 'avatarUrl' | 'institutionalId' | 'department' | 'bio' | 'profileCompleted'>>) => UserProfile | null
 }
 

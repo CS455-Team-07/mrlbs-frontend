@@ -1,29 +1,58 @@
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  getActiveUserProfile,
   handleUserAuthentication,
   setActiveUserProfile,
   updateUserProfile,
   type AuthenticatedIdentity,
 } from '../services/userService'
 import type { UserProfile } from '../types/User'
+import { apiClientConfig, csrfFetch } from '../services/apiClient'
 import { AuthContext } from './authContextInstance'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Always load from localStorage — null means "not logged in".
-  // Login is required in all modes (auth-enabled or demo).
-  const [user, setUser] = useState<UserProfile | null>(() =>
-    getActiveUserProfile(),
-  )
+  // Local storage is only a profile cache. The server session is authoritative.
+  const [user, setUser] = useState<UserProfile | null>(null)
+  const currentUser = useRef<UserProfile | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void fetch(`${apiClientConfig.baseUrl}/auth/me`, { credentials: 'include' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('No active server session')
+        const identity = (await response.json()) as AuthenticatedIdentity
+        if (!identity.id || !identity.email?.trim().toLowerCase().endsWith('@iitk.ac.in')) {
+          throw new Error('Server session has no verified IITK identity')
+        }
+        if (!cancelled && !currentUser.current) {
+          const profile = handleUserAuthentication(identity)
+          currentUser.current = profile
+          setUser(profile)
+        }
+      })
+      .catch(() => {
+        if (!cancelled && !currentUser.current) {
+          setActiveUserProfile(null)
+          setUser(null)
+        }
+      })
+    return () => { cancelled = true }
+  }, [])
 
   const login = useCallback((identity: AuthenticatedIdentity): UserProfile => {
     const profile = handleUserAuthentication(identity)
+    currentUser.current = profile
     setUser(profile)
     return profile
   }, [])
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await csrfFetch(`${apiClientConfig.authBaseUrl}/logout`, { method: 'POST' })
+    } catch {
+      // Always clear the local profile even when the backend session expired.
+    }
     setActiveUserProfile(null)
+    currentUser.current = null
     setUser(null)
     // Also clear the backend demo-admin cookie so the next login starts fresh
     document.cookie = 'DEMO_ADMIN_EMAIL=; path=/; max-age=0'
