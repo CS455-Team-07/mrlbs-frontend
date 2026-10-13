@@ -173,33 +173,59 @@ export function AiAssistantDrawer({
             </div>
           )}
 
-          {/* Follow-up / Mandatory Clarification Alert (e.g. Missing Date) */}
+          {/* Follow-up / Mandatory Clarification Alert (e.g. Greeting or Missing Date/Type) */}
           {result?.followUpQuestion && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
+            <div
+              className={`rounded-xl border p-4 text-sm shadow-sm ${
+                result.followUpQuestion.toLowerCase().startsWith('hello') || result.followUpQuestion.toLowerCase().startsWith('hi')
+                  ? 'border-blue-200 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 text-blue-950'
+                  : 'border-amber-300 bg-amber-50 text-amber-900'
+              }`}
+            >
               <div className="flex items-center gap-2 font-semibold">
-                <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <span>Information Needed</span>
+                {result.followUpQuestion.toLowerCase().startsWith('hello') || result.followUpQuestion.toLowerCase().startsWith('hi') ? (
+                  <span className="text-base">👋</span>
+                ) : (
+                  <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                )}
+                <span>
+                  {result.followUpQuestion.toLowerCase().startsWith('hello') || result.followUpQuestion.toLowerCase().startsWith('hi')
+                    ? 'AI Assistant'
+                    : 'Information Needed'}
+                </span>
               </div>
-              <p className="mt-2 text-sm">{result.followUpQuestion}</p>
+              <p className="mt-2 text-sm leading-relaxed">{result.followUpQuestion}</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                {['Today', 'Tomorrow', 'Next Monday'].map((dt) => (
+                {(result.suggestedRefinements && result.suggestedRefinements.length > 0
+                  ? result.suggestedRefinements
+                  : ['Lecture Hall', 'KD Lab', 'Today', 'Tomorrow']
+                ).map((chip) => (
                   <button
-                    key={dt}
+                    key={chip}
                     type="button"
-                    onClick={() => void handleSend(dt)}
-                    className="rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 px-3 py-1 text-xs font-semibold transition"
+                    onClick={() => void handleSend(chip)}
+                    className="rounded-lg bg-white border border-slate-200 hover:border-blue-400 hover:text-blue-700 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-xs transition"
                   >
-                    📅 {dt}
+                    {chip.includes(':')
+                      ? '⏰ '
+                      : chip.includes('Hall')
+                      ? '🏛️ '
+                      : chip.includes('Lab')
+                      ? '🔬 '
+                      : chip.includes('GPU')
+                      ? '💻 '
+                      : '📅 '}
+                    {chip}
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Engaging Conversational Follow-up for Optional Criteria (Slots & Capacity) */}
-          {result?.engagementPrompt && (
+          {/* Engaging Conversational Follow-up for Optional Criteria (Slots, Capacity, or Resource Type) */}
+          {result?.engagementPrompt && !result?.followUpQuestion && (
             <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/70 to-blue-50/50 p-4 shadow-sm">
               <div className="flex items-center gap-2">
                 <span className="text-base">💡</span>
@@ -220,7 +246,17 @@ export function AiAssistantDrawer({
                       onClick={() => void handleSend(refinement)}
                       className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-600 hover:text-white shadow-xs transition"
                     >
-                      {refinement.includes(':') ? '⏰ ' : '👥 '}
+                      {refinement.includes(':')
+                        ? '⏰ '
+                        : refinement.includes('Hall')
+                        ? '🏛️ '
+                        : refinement.includes('Lab')
+                        ? '🔬 '
+                        : refinement.includes('GPU')
+                        ? '💻 '
+                        : refinement.includes('seat')
+                        ? '👥 '
+                        : '✨ '}
                       {refinement}
                     </button>
                   ))}
