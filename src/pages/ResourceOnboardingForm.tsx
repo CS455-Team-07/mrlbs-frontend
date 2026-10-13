@@ -83,7 +83,7 @@ export function ResourceOnboardingForm({ onCreated }: { onCreated?: () => void }
           bufferTimeMinutes: Number(bufferTimeMinutes),
           maxBookingsPerMember: Number(maxBookingsPerMember),
           bookingRule: {
-            bookingPolicy: approvalRequired ? 'APPROVAL_REQUIRED' : 'OPEN',
+            bookingPolicy: approvalRequired ? 'APPROVAL_REQUIRED' : 'FCFS',
             minDurationMinutes: parsedMin,
             maxDurationMinutes: parsedMax,
             bufferTimeMinutes: Number(bufferTimeMinutes),
