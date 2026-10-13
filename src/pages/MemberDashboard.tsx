@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, type FormEvent } from 'react'
-import { apiClientConfig } from '../services/apiClient'
+import { apiClientConfig, getCsrfToken } from '../services/apiClient'
 import { AuthContext } from '../context/authContextInstance'
 import { AiAssistantDrawer } from '../components/AiAssistantDrawer'
 import type { ResourceRecommendation } from '../services/aiService'
@@ -54,17 +54,20 @@ export function MemberDashboard() {
   const [showAiAssistant, setShowAiAssistant] = useState(false)
 
   const handleSelectRecommendation = async (rec: ResourceRecommendation) => {
+    const chosenDate = rec.date || date
     if (rec.type) setType(rec.type)
     if (rec.date) setDate(rec.date)
     const slotStart = rec.suggestedStartTime || rec.requestedStartTime
     const slotEnd = rec.suggestedEndTime || rec.requestedEndTime
+    let formattedStart = searchStartTime
+    let formattedEnd = searchEndTime
     if (slotStart) {
-      const formattedStart = slotStart.length >= 5 ? slotStart.substring(0, 5) : slotStart
+      formattedStart = slotStart.length >= 5 ? slotStart.substring(0, 5) : slotStart
       setStartTime(formattedStart)
       setSearchStartTime(formattedStart)
     }
     if (slotEnd) {
-      const formattedEnd = slotEnd.length >= 5 ? slotEnd.substring(0, 5) : slotEnd
+      formattedEnd = slotEnd.length >= 5 ? slotEnd.substring(0, 5) : slotEnd
       setEndTime(formattedEnd)
       setSearchEndTime(formattedEnd)
     }
@@ -84,7 +87,7 @@ export function MemberDashboard() {
       return exists ? prev : [targetOpt, ...prev]
     })
 
-    await chooseResource(targetOpt)
+    await chooseResource(targetOpt, chosenDate, formattedStart, formattedEnd)
   }
 
   const isClashing = Boolean(
@@ -171,24 +174,32 @@ export function MemberDashboard() {
     } finally { setLoading(false) }
   }
 
-  async function chooseResource(resource: ResourceOption) {
+  async function chooseResource(
+    resource: ResourceOption,
+    targetDate?: string,
+    targetStart?: string,
+    targetEnd?: string
+  ) {
     if (selectedResource?.id === resource.id) {
       setSelectedResource(null)
       setAvailability(null)
       setBooking(null)
       return
     }
+    const effectiveDate = targetDate || date
+    const effectiveStart = targetStart !== undefined ? targetStart : (searchStartTime || '')
+    const effectiveEnd = targetEnd !== undefined ? targetEnd : (searchEndTime || '')
     setSelectedResource(resource)
     setBooking(null)
-    setStartTime(searchStartTime || '')
-    setEndTime(searchEndTime || '')
+    setStartTime(effectiveStart)
+    setEndTime(effectiveEnd)
     setError('')
     try {
-      const response = await fetch(`${apiClientConfig.baseUrl}/resources/${resource.id}/availability?date=${date}`, { credentials: 'include' })
+      const response = await fetch(`${apiClientConfig.baseUrl}/resources/${resource.id}/availability?date=${effectiveDate}`, { credentials: 'include' })
       if (!response.ok) throw new Error('Availability could not be loaded.')
       const avail = (await response.json()) as Availability
       setAvailability(avail)
-      if (!searchStartTime || !searchEndTime) {
+      if (!effectiveStart || !effectiveEnd) {
         setResources((current) =>
           current.map((r) => (r.id === resource.id ? { ...r, available: avail.availableSlots.length > 0 } : r))
         )
@@ -204,9 +215,7 @@ export function MemberDashboard() {
     setLoading(true)
     setError('')
     try {
-      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
-      if (!csrfResponse.ok) throw new Error('Could not prepare the secure booking request.')
-      const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
+      const csrf = await getCsrfToken()
       let response = await fetch(`${apiClientConfig.baseUrl}/bookings/draft`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
@@ -252,8 +261,7 @@ export function MemberDashboard() {
     setDraftBooking(null)
     if (idToDelete) {
       try {
-        const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
-        const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
+        const csrf = await getCsrfToken()
         await fetch(`${apiClientConfig.baseUrl}/bookings/${idToDelete}`, {
           method: 'DELETE',
           credentials: 'include',
@@ -271,9 +279,7 @@ export function MemberDashboard() {
     setConfirmLoading(true)
     setError('')
     try {
-      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
-      if (!csrfResponse.ok) throw new Error('Could not prepare the secure booking request.')
-      const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
+      const csrf = await getCsrfToken()
       let response = await fetch(`${apiClientConfig.baseUrl}/bookings/${draftBooking.id}/confirm`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
@@ -338,9 +344,7 @@ export function MemberDashboard() {
     setLoading(true)
     setError('')
     try {
-      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
-      if (!csrfResponse.ok) throw new Error('Could not prepare the secure booking request.')
-      const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
+      const csrf = await getCsrfToken()
       const response = await fetch(`${apiClientConfig.baseUrl}/bookings/${editingBooking.id}/time-window`, {
         method: 'PUT', credentials: 'include',
         headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
@@ -364,9 +368,7 @@ export function MemberDashboard() {
     setLoading(true)
     setError('')
     try {
-      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
-      if (!csrfResponse.ok) throw new Error('Could not prepare the secure booking request.')
-      const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
+      const csrf = await getCsrfToken()
       const response = await fetch(`${apiClientConfig.baseUrl}/bookings/${memberBooking.id}`, {
         method: 'DELETE', credentials: 'include', headers: { [csrf.headerName]: csrf.token },
       })
