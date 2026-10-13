@@ -1,6 +1,8 @@
 import { useState, useEffect, useContext, type FormEvent } from 'react'
-import { apiClientConfig } from '../services/apiClient'
+import { apiClientConfig, getCsrfToken } from '../services/apiClient'
 import { AuthContext } from '../context/authContextInstance'
+import { AiAssistantDrawer } from '../components/AiAssistantDrawer'
+import type { ResourceRecommendation } from '../services/aiService'
 
 interface ResourceOption {
   id: string
@@ -50,6 +52,44 @@ export function MemberDashboard() {
   const [rejectionModalReason, setRejectionModalReason] = useState<string | null>(null)
   const [showRejectionModal, setShowRejectionModal] = useState(false)
   const [selectedBookingDetails, setSelectedBookingDetails] = useState<MemberBooking | null>(null)
+  const [showAiAssistant, setShowAiAssistant] = useState(false)
+
+  const handleSelectRecommendation = async (rec: ResourceRecommendation) => {
+    const chosenDate = rec.date || date
+    if (rec.type) setType(rec.type)
+    if (rec.date) setDate(rec.date)
+    const slotStart = rec.suggestedStartTime || rec.requestedStartTime
+    const slotEnd = rec.suggestedEndTime || rec.requestedEndTime
+    let formattedStart = searchStartTime
+    let formattedEnd = searchEndTime
+    if (slotStart) {
+      formattedStart = slotStart.length >= 5 ? slotStart.substring(0, 5) : slotStart
+      setStartTime(formattedStart)
+      setSearchStartTime(formattedStart)
+    }
+    if (slotEnd) {
+      formattedEnd = slotEnd.length >= 5 ? slotEnd.substring(0, 5) : slotEnd
+      setEndTime(formattedEnd)
+      setSearchEndTime(formattedEnd)
+    }
+    if (rec.capacity) setCapacity(String(rec.capacity))
+
+    const targetOpt: ResourceOption = {
+      id: rec.resourceId,
+      name: rec.name,
+      type: rec.type,
+      location: rec.location,
+      capacity: rec.capacity,
+      available: rec.available,
+    }
+
+    setResources((prev) => {
+      const exists = prev.some((r) => r.id === rec.resourceId)
+      return exists ? prev : [targetOpt, ...prev]
+    })
+
+    await chooseResource(targetOpt, chosenDate, formattedStart, formattedEnd)
+  }
 
   const isClashing = Boolean(
     draftBooking?.clashes ||
@@ -93,6 +133,9 @@ export function MemberDashboard() {
     if (problem.reasonCode === 'BUFFER_TIME_VIOLATION') {
       return problem.detail || 'The booking violates the required buffer time between lab sessions.'
     }
+    if (problem.reasonCode === 'SLOT_CONFLICT') {
+      return problem.detail || 'This time window clashes with an already booked slot. Please select the exact slot to go to waitlist or choose a different time.'
+    }
     if (problem.reasonCode === 'QUOTA_EXCEEDED') {
       return problem.detail || 'You have reached the maximum active bookings quota for this resource.'
     }
@@ -135,24 +178,32 @@ export function MemberDashboard() {
     } finally { setLoading(false) }
   }
 
-  async function chooseResource(resource: ResourceOption) {
+  async function chooseResource(
+    resource: ResourceOption,
+    targetDate?: string,
+    targetStart?: string,
+    targetEnd?: string
+  ) {
     if (selectedResource?.id === resource.id) {
       setSelectedResource(null)
       setAvailability(null)
       setBooking(null)
       return
     }
+    const effectiveDate = targetDate || date
+    const effectiveStart = targetStart !== undefined ? targetStart : (searchStartTime || '')
+    const effectiveEnd = targetEnd !== undefined ? targetEnd : (searchEndTime || '')
     setSelectedResource(resource)
     setBooking(null)
-    setStartTime(searchStartTime || '')
-    setEndTime(searchEndTime || '')
+    setStartTime(effectiveStart)
+    setEndTime(effectiveEnd)
     setError('')
     try {
-      const response = await fetch(`${apiClientConfig.baseUrl}/resources/${resource.id}/availability?date=${date}`, { credentials: 'include' })
+      const response = await fetch(`${apiClientConfig.baseUrl}/resources/${resource.id}/availability?date=${effectiveDate}`, { credentials: 'include' })
       if (!response.ok) throw new Error('Availability could not be loaded.')
       const avail = (await response.json()) as Availability
       setAvailability(avail)
-      if (!searchStartTime || !searchEndTime) {
+      if (!effectiveStart || !effectiveEnd) {
         setResources((current) =>
           current.map((r) => (r.id === resource.id ? { ...r, available: avail.availableSlots.length > 0 } : r))
         )
@@ -168,9 +219,7 @@ export function MemberDashboard() {
     setLoading(true)
     setError('')
     try {
-      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
-      if (!csrfResponse.ok) throw new Error('Could not prepare the secure booking request.')
-      const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
+      const csrf = await getCsrfToken()
       let response = await fetch(`${apiClientConfig.baseUrl}/bookings/draft`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
@@ -216,8 +265,7 @@ export function MemberDashboard() {
     setDraftBooking(null)
     if (idToDelete) {
       try {
-        const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
-        const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
+        const csrf = await getCsrfToken()
         await fetch(`${apiClientConfig.baseUrl}/bookings/${idToDelete}`, {
           method: 'DELETE',
           credentials: 'include',
@@ -235,9 +283,7 @@ export function MemberDashboard() {
     setConfirmLoading(true)
     setError('')
     try {
-      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
-      if (!csrfResponse.ok) throw new Error('Could not prepare the secure booking request.')
-      const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
+      const csrf = await getCsrfToken()
       let response = await fetch(`${apiClientConfig.baseUrl}/bookings/${draftBooking.id}/confirm`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
@@ -302,9 +348,7 @@ export function MemberDashboard() {
     setLoading(true)
     setError('')
     try {
-      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
-      if (!csrfResponse.ok) throw new Error('Could not prepare the secure booking request.')
-      const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
+      const csrf = await getCsrfToken()
       const response = await fetch(`${apiClientConfig.baseUrl}/bookings/${editingBooking.id}/time-window`, {
         method: 'PUT', credentials: 'include',
         headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
@@ -328,9 +372,7 @@ export function MemberDashboard() {
     setLoading(true)
     setError('')
     try {
-      const csrfResponse = await fetch(`${apiClientConfig.baseUrl}/auth/csrf`, { credentials: 'include' })
-      if (!csrfResponse.ok) throw new Error('Could not prepare the secure booking request.')
-      const csrf = (await csrfResponse.json()) as { token: string; headerName: string }
+      const csrf = await getCsrfToken()
       const response = await fetch(`${apiClientConfig.baseUrl}/bookings/${memberBooking.id}`, {
         method: 'DELETE', credentials: 'include', headers: { [csrf.headerName]: csrf.token },
       })
@@ -371,10 +413,22 @@ export function MemberDashboard() {
 
   return (
     <section className="mx-auto w-full max-w-4xl py-8">
-      <header className="mb-8">
-        <p className="text-sm font-semibold text-blue-700">Member area</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Find and book a resource</h1>
-        <p className="mt-3 max-w-2xl text-slate-600">Search by resource type, date, and capacity. Review availability and submit a booking.</p>
+      <header className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-blue-700">Member area</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Find and book a resource</h1>
+          <p className="mt-3 max-w-2xl text-slate-600">Search by resource type, date, and capacity. Review availability and submit a booking.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowAiAssistant(true)}
+          className="self-start sm:self-center inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-indigo-700 transition"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          Ask AI Assistant
+        </button>
       </header>
 
       {/* ── Search form ────────────────────────────────────────────── */}
@@ -833,6 +887,13 @@ export function MemberDashboard() {
           </form>
         )}
       </section>
+
+      <AiAssistantDrawer
+        isOpen={showAiAssistant}
+        onClose={() => setShowAiAssistant(false)}
+        currentDate={date}
+        onSelectRecommendation={handleSelectRecommendation}
+      />
     </section>
   )
 }

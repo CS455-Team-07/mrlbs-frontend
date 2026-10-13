@@ -27,7 +27,7 @@ const makeDraft = (resource: Resource): ResourceDraft => ({
   type: resource.type ?? '',
   location: resource.location ?? '',
   capacity: resource.capacity ?? 0,
-  bookingPolicy: resource.bookingRule?.bookingPolicy ?? 'OPEN',
+  bookingPolicy: resource.bookingRule?.bookingPolicy ?? 'FCFS',
   minDurationMinutes: resource.bookingRule?.minDurationMinutes ?? 30,
   maxDurationMinutes: resource.bookingRule?.maxDurationMinutes ?? 180,
   bufferTimeMinutes: resource.bookingRule?.bufferTimeMinutes ?? 15,
@@ -110,7 +110,7 @@ export function AdminDashboard() {
           type: '',
           location: '',
           capacity: 0,
-          bookingPolicy: 'OPEN',
+          bookingPolicy: 'FCFS',
           minDurationMinutes: 30,
           maxDurationMinutes: 180,
           bufferTimeMinutes: 15,
@@ -365,7 +365,7 @@ export function AdminDashboard() {
                               onChange={(event) => updateDraft(resource.id, 'bookingPolicy', event.target.value)}
                               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                             >
-                              <option value="OPEN">Open</option>
+                              <option value="FCFS">FCFS</option>
                               <option value="APPROVAL_REQUIRED">Approval required</option>
                             </select>
                           </label>
