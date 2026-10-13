@@ -9,6 +9,7 @@ import {
 } from '../services/resourceService'
 import { csrfFetch } from '../services/apiClient'
 import { getScopeForEmail } from '../config/adminConfig'
+import { BookingApprovalQueue } from '../components/BookingApprovalQueue'
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
 type ResourceDraft = {
@@ -444,6 +445,7 @@ export function AdminDashboard() {
           )}
         </div>
       </div>
+      <BookingApprovalQueue />
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-900">
           Inactive Resources

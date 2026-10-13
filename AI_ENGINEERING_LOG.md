@@ -403,3 +403,38 @@ Admin resource onboarding now succeeds from the frontend form when logged in as 
 **Decision:** Pending human review.
 
 **Reason:** Bug fix � demo-mode cookie priority and cleanup corrected; no change to production auth or resource creation logic.
+
+#### 2026-10-13 — BOOK-84 admin approval queue
+
+**Task / Context:**
+Added a frontend review queue for approval-required bookings so admins can process the backend pending-approval workflow.
+
+**Prompt:**
+The user requested implementing BOOK-84 from a new main-based branch, then explicitly asked for a live local test before pushing. The acceptance criteria require pending requests to be available to Admin/AI review and their status changes to be auditable.
+
+**AI Output / Response:**
+Implemented an Admin Dashboard queue that lists pending requests, approves or rejects them through the backend API, and displays persisted lifecycle history. Added focused component tests for listing/approval and audit-history display.
+
+**Student / Team Evaluation:**
+Pending human review.
+
+**Errors / Risks / Hallucinations:**
+The frontend build succeeds and both focused component tests pass. Live browser verification is still in progress. Automated AI decisions are not present in the existing application and were not introduced.
+
+**Changes Made After Evaluating the AI Output:**
+Pending live browser verification.
+
+**Final Accepted Artifact:**
+Pending review: frontend branch `feature/BOOK-84-approval-lifecycle`.
+
+**Decision:** Pending human review.
+
+**Reason:** The focused tests pass; the user requested live verification before publication.
+
+#### 2026-10-13 — BOOK-84 verification update
+
+The frontend production build completed, both focused `BookingApprovalQueue` tests passed, and ESLint passed for the changed frontend files. In a separate local demo session, the admin UI loaded a `PENDING_APPROVAL` booking, displayed its `Submitted → PENDING_APPROVAL` audit event, approved it, and refreshed to the empty queue state. Backend API checks also exercised rejection and credit refund.
+
+Verification correction: the first ESLint run found a `react-hooks/set-state-in-effect` error in the new queue's initial-load effect (and the pre-existing AdminDashboard dependency warning). The queue effect has since been adjusted; the earlier statement that ESLint passed should be considered pending rerun until confirmed below.
+
+Final verification update: the queue effect now passes ESLint. Targeted lint completed with 0 errors and one pre-existing `AdminDashboard.tsx` dependency warning. The frontend build succeeded and all 3 focused approval-queue tests passed. The live browser was rerun after the effect fix: the scoped GPU admin saw the pending card and audit event, approved the request, and the queue returned to zero pending.
