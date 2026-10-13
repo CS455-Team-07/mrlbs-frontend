@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, type FormEvent } from 'react'
-import { apiClientConfig, csrfFetch } from '../services/apiClient'
+import { apiClientConfig, csrfFetch, getCsrfToken } from '../services/apiClient'
 import { AuthContext } from '../context/authContextInstance'
 import { AiAssistantDrawer } from '../components/AiAssistantDrawer'
 import type { ResourceRecommendation } from '../services/aiService'

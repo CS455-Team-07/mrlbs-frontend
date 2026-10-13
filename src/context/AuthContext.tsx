@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
+  clearUserStorage,
   handleUserAuthentication,
   setActiveUserProfile,
   updateUserProfile,
   type AuthenticatedIdentity,
 } from '../services/userService'
 import type { UserProfile } from '../types/User'
-import { apiClientConfig, csrfFetch } from '../services/apiClient'
+import { apiClientConfig } from '../services/apiClient'
 import { AuthContext } from './authContextInstance'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -32,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         if (!cancelled && !currentUser.current) {
           setActiveUserProfile(null)
+          clearUserStorage()
           setUser(null)
         }
       })
@@ -47,17 +49,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await csrfFetch(`${apiClientConfig.authBaseUrl}/logout`, { method: 'POST' })
+      await fetch(`${apiClientConfig.baseUrl}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      })
     } catch {
       // Always clear the local profile even when the backend session expired.
     }
     setActiveUserProfile(null)
+    clearUserStorage()
     currentUser.current = null
     setUser(null)
     // Clear both demo-identity cookies so neither a stale admin nor a stale
     // member session can bleed into the next login.
     document.cookie = 'DEMO_ADMIN_EMAIL=; path=/; max-age=0'
     document.cookie = 'DEMO_MEMBER_EMAIL=; path=/; max-age=0'
+    document.cookie = 'DEMO_USER_EMAIL=; path=/; max-age=0'
   }
 
   const updateProfile = (

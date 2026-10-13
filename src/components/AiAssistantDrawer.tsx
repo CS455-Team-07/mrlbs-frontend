@@ -59,7 +59,7 @@ export function AiAssistantDrawer({
 
   const isPastTimeChip = (chip: string): boolean => {
     if (!chip.includes(':')) return false
-    const targetDateStr = result?.parsedIntent?.date || currentDate
+    const targetDateStr = result?.extractedIntent?.date || currentDate
     if (!targetDateStr) return false
     const now = new Date()
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`

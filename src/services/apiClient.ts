@@ -1,10 +1,9 @@
-/** Central configuration entry point for REST API and authentication requests. */
-const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
+const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export const apiClientConfig = {
   baseUrl,
   // Auth and REST endpoints are served by the same backend.
-  authBaseUrl: baseUrl.replace(/\/api\/?$/, ''),
+  authBaseUrl: baseUrl === '/api' ? '' : baseUrl.replace(/\/api\/?$/, ''),
 } as const
 
 interface CsrfData {
