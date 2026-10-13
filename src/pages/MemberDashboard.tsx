@@ -132,6 +132,9 @@ export function MemberDashboard() {
     if (problem.reasonCode === 'BUFFER_TIME_VIOLATION') {
       return problem.detail || 'The booking violates the required buffer time between lab sessions.'
     }
+    if (problem.reasonCode === 'SLOT_CONFLICT') {
+      return problem.detail || 'This time window clashes with an already booked slot. Please select the exact slot to go to waitlist or choose a different time.'
+    }
     if (problem.reasonCode === 'QUOTA_EXCEEDED') {
       return problem.detail || 'You have reached the maximum active bookings quota for this resource.'
     }
