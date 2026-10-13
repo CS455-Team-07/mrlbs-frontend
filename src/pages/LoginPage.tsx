@@ -44,6 +44,10 @@ export function LoginPage() {
 
     setAdminLoading(true)
     try {
+      // Clear any stale member-identity cookie before switching to an admin identity
+      // so the backend DemoAuthenticationFilter never picks up the wrong cookie.
+      document.cookie = 'DEMO_MEMBER_EMAIL=; path=/; max-age=0'
+
       // Tell the backend which admin identity this session uses
       const res = await fetch(`${apiClientConfig.baseUrl}/demo/switch`, {
         method: 'POST',

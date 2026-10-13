@@ -8,25 +8,58 @@ export const apiClientConfig = {
   authBaseUrl: baseUrl.replace(/\/api\/?$/, ''),
 } as const
 
+interface CsrfData {
+  token: string
+  headerName: string
+}
+
+let cachedCsrf: CsrfData | null = null
+let csrfPromise: Promise<CsrfData> | null = null
+
 /**
- * Fetches a fresh CSRF token from the backend, then performs the requested
- * mutating fetch (DELETE, PUT, POST, PATCH) with the token attached and
- * credentials included.  Drop-in replacement for `fetch` for mutating calls.
+ * Returns the cached CSRF token or fetches a fresh one from the backend.
+ * Concurrent callers share a single in-flight network request.
+ */
+export async function getCsrfToken(forceRefresh = false): Promise<CsrfData> {
+  if (!forceRefresh && cachedCsrf) {
+    return cachedCsrf
+  }
+  if (!forceRefresh && csrfPromise) {
+    return csrfPromise
+  }
+
+  csrfPromise = fetch(`${baseUrl}/auth/csrf`, {
+    credentials: 'include',
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error('Could not retrieve CSRF token.')
+      }
+      const data = (await response.json()) as CsrfData
+      cachedCsrf = data
+      return data
+    })
+    .finally(() => {
+      csrfPromise = null
+    })
+
+  return csrfPromise
+}
+
+export function clearCsrfTokenCache(): void {
+  cachedCsrf = null
+  csrfPromise = null
+}
+
+/**
+ * Performs a mutating fetch (DELETE, PUT, POST, PATCH) with the cached CSRF token
+ * attached and credentials included.
  */
 export async function csrfFetch(
   url: string,
   options: RequestInit = {},
 ): Promise<Response> {
-  const csrfResponse = await fetch(`${baseUrl}/auth/csrf`, {
-    credentials: 'include',
-  })
-  if (!csrfResponse.ok) {
-    throw new Error('Could not retrieve CSRF token.')
-  }
-  const csrf = (await csrfResponse.json()) as {
-    token: string
-    headerName: string
-  }
+  const csrf = await getCsrfToken()
 
   return fetch(url, {
     ...options,
@@ -37,3 +70,4 @@ export async function csrfFetch(
     },
   })
 }
+
