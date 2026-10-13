@@ -483,3 +483,16 @@ Admin resource onboarding now succeeds from the frontend form when logged in as 
 **Decision:** Modified.
 
 **Reason:** Resolve conflicts while retaining the verified institutional mailbox flow and latest mainline work.
+#### 2026-10-13 — Publish resolved authentication merge
+
+**Task / Context:** Follow-up to merging latest `main` into the frontend authentication branch.
+
+**AI Output / Response:** Pushed the resolved merge commit and verified the remote branch matches local `HEAD`.
+
+**Student / Team Evaluation:** GitHub reports frontend PR #16 as mergeable with a clean merge state. Tests were not rerun after this merge.
+
+**Final Accepted Artifact / Output:** `authentication` is updated on origin at `adb75c047a33b2392b70eaa4769c241a65417a76`.
+
+**Decision:** Accepted.
+
+**Reason:** The user requested conflict resolution on their branches.
