@@ -18,6 +18,7 @@ interface MemberBooking extends BookingResult {
   endTime: string
   resourceId: string
   resourceName?: string
+  memberId?: string
 }
 interface ApiProblem { reasonCode?: string; detail?: string }
 
@@ -358,14 +359,14 @@ export function MemberDashboard() {
 
   // Group bookings by date
   const bookingsByDate: Record<string, MemberBooking[]> = {}
-  ;(Array.isArray(memberBookings) ? memberBookings : []).forEach((b) => {
-    if (!b?.startTime) return
-    const bookingDate = b.startTime.slice(0, 10)
-    if (!bookingsByDate[bookingDate]) {
-      bookingsByDate[bookingDate] = []
-    }
-    bookingsByDate[bookingDate].push(b)
-  })
+    ; (Array.isArray(memberBookings) ? memberBookings : []).forEach((b) => {
+      if (!b?.startTime) return
+      const bookingDate = b.startTime.slice(0, 10)
+      if (!bookingsByDate[bookingDate]) {
+        bookingsByDate[bookingDate] = []
+      }
+      bookingsByDate[bookingDate].push(b)
+    })
   const sortedDates = Object.keys(bookingsByDate).sort().reverse()
 
   return (
@@ -403,11 +404,10 @@ export function MemberDashboard() {
           <div key={resource.id}>
             {/* Resource row with status badge */}
             <article
-              className={`flex cursor-pointer items-center justify-between gap-4 rounded-xl border p-4 transition ${
-                isExpanded(resource.id)
-                  ? 'border-blue-600 bg-blue-50/40 shadow-sm'
-                  : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
-              }`}
+              className={`flex cursor-pointer items-center justify-between gap-4 rounded-xl border p-4 transition ${isExpanded(resource.id)
+                ? 'border-blue-600 bg-blue-50/40 shadow-sm'
+                : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                }`}
               onClick={() => void chooseResource(resource)}
               role="button"
               tabIndex={0}
@@ -424,11 +424,10 @@ export function MemberDashboard() {
               </div>
               {/* Status badge */}
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${
-                  resource.available
-                    ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'border border-red-200 bg-red-50 text-red-700'
-                }`}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${resource.available
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border border-red-200 bg-red-50 text-red-700'
+                  }`}
               >
                 <span className={`inline-block size-2 rounded-full ${resource.available ? 'bg-emerald-500' : 'bg-red-500'}`} />
                 {resource.available ? 'Open' : 'Booked'}
@@ -566,9 +565,8 @@ export function MemberDashboard() {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Status</span>
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                  isClashing ? 'bg-amber-100 text-amber-800' : 'bg-amber-100 text-amber-800'
-                }`}>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${isClashing ? 'bg-amber-100 text-amber-800' : 'bg-amber-100 text-amber-800'
+                  }`}>
                   {isClashing ? 'WILL BE IN_PROGRESS' : 'DRAFT (Unreserved)'}
                 </span>
               </div>
@@ -679,19 +677,22 @@ export function MemberDashboard() {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Status</span>
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                  selectedBookingDetails.status === 'CONFIRMED'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : selectedBookingDetails.status === 'DRAFT'
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${selectedBookingDetails.status === 'CONFIRMED'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : selectedBookingDetails.status === 'DRAFT'
                     ? 'bg-amber-100 text-amber-800'
                     : 'bg-slate-100 text-slate-800'
-                }`}>
+                  }`}>
                   {selectedBookingDetails.status}
                 </span>
               </div>
               <div className="flex justify-between border-t border-slate-200 pt-3">
                 <span className="text-slate-500">Credit Cost</span>
                 <span className="font-bold text-blue-700">{selectedBookingDetails.creditCost} Credits</span>
+              </div>
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>Member ID</span>
+                <span className="font-mono">{selectedBookingDetails.memberId || 'N/A'}</span>
               </div>
               <div className="flex justify-between text-xs text-slate-400">
                 <span>Booking ID</span>
@@ -748,6 +749,10 @@ export function MemberDashboard() {
                         <h4 className="font-semibold text-slate-900">
                           {memberBooking.resourceName || `Resource: ${memberBooking.resourceId.slice(0, 8)}…`}
                         </h4>
+                        {memberBooking.memberId && (
+                          <p className="text-xs text-slate-500">Member ID: {memberBooking.memberId}</p>
+                        )}
+
                         <p className="mt-1 text-sm text-slate-600">
                           ⏱ {memberBooking.startTime.replace('T', ' ').slice(11, 16)} - {memberBooking.endTime.replace('T', ' ').slice(11, 16)} · {memberBooking.creditCost} Credits
                         </p>
@@ -789,15 +794,14 @@ export function MemberDashboard() {
                             </button>
                           )}
                           <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${
-                              memberBooking.status === 'CONFIRMED'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : memberBooking.status === 'PENDING' || memberBooking.status === 'PENDING_APPROVAL'
+                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${memberBooking.status === 'CONFIRMED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : memberBooking.status === 'PENDING' || memberBooking.status === 'PENDING_APPROVAL'
                                 ? 'bg-amber-100 text-amber-800'
                                 : memberBooking.status === 'DRAFT'
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-slate-200 text-slate-700'
-                            }`}
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-slate-200 text-slate-700'
+                              }`}
                           >
                             {memberBooking.status}
                           </span>
