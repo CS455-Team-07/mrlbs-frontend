@@ -1,8 +1,8 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { AuthProvider } from '../context/AuthContext'
-import { clearUserStorage } from '../services/userService'
+import { clearUserStorage, handleUserAuthentication, setActiveUserProfile } from '../services/userService'
 import { LoginPage } from './LoginPage'
 
 afterEach(() => {
@@ -11,75 +11,93 @@ afterEach(() => {
   clearUserStorage()
 })
 
-function renderLoginPage(initialEntries: string[] = ['/login']) {
+function renderLoginPage() {
+  if (!vi.isMockFunction(fetch)) {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(false, {})))
+  }
   return render(
     <AuthProvider>
-      <MemoryRouter initialEntries={initialEntries}>
+      <MemoryRouter initialEntries={['/login']}>
         <LoginPage />
       </MemoryRouter>
     </AuthProvider>,
   )
 }
 
-describe('institutional Google sign-in', () => {
-  it('starts Google OAuth sign-in', () => {
+function response(ok: boolean, body: object) {
+  return { ok, status: ok ? 200 : 400, json: async () => body }
+}
+
+describe('institutional email sign-in', () => {
+  it('offers one-time-code sign-in restricted to IITK email', () => {
     renderLoginPage()
 
-    expect(screen.getByRole('link', { name: /continue with google/i })).toHaveAttribute(
-      'href',
-      'http://localhost:8080/oauth2/authorization/google',
-    )
+    expect(screen.getByLabelText(/iitk email address/i)).toBeInTheDocument()
+    expect(screen.getByText(/only/i)).toHaveTextContent('@iitk.ac.in')
+    expect(screen.getByRole('button', { name: /email me a verification code/i })).toBeInTheDocument()
   })
 
-  it('explains that an account outside the institutional domain was denied', () => {
-    renderLoginPage(['/login?error=institutional-domain'])
-
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'Use the Google Workspace account for iitk.ac.in to sign in.',
-    )
-  })
-
-  it('loads and displays the signed-in identity after the OAuth callback', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ id: 'google-subject', name: 'Ananya', email: 'ananya@iitk.ac.in' }),
-    })
+  it('requests a code through the protected API and proceeds to code entry', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response(false, {}))
+      .mockResolvedValueOnce(response(true, { token: 'csrf', headerName: 'X-CSRF-TOKEN' }))
+      .mockResolvedValueOnce(response(true, { message: 'Code sent' }))
     vi.stubGlobal('fetch', fetchMock)
+    renderLoginPage()
 
-    renderLoginPage(['/login?authenticated'])
+    fireEvent.change(screen.getByLabelText(/iitk email address/i), { target: { value: 'ananya@iitk.ac.in' } })
+    fireEvent.click(screen.getByRole('button', { name: /email me a verification code/i }))
 
-    expect(await screen.findByText('Signed in as Ananya')).toBeInTheDocument()
-    expect(screen.getByText('ananya@iitk.ac.in')).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/\/auth\/me$/),
-      { credentials: 'include' },
+    expect(await screen.findByLabelText(/six-digit verification code/i)).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'http://localhost:8080/api/auth/request-code',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: 'ananya@iitk.ac.in' }) }),
     )
   })
 
-  it('reports when the authenticated session cannot be verified', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({ ok: false }),
+  it('creates a local profile only after the backend verifies the code', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response(false, {}))
+      .mockResolvedValueOnce(response(true, { token: 'csrf', headerName: 'X-CSRF-TOKEN' }))
+      .mockResolvedValueOnce(response(true, { message: 'Code sent' }))
+      .mockResolvedValueOnce(response(true, { token: 'csrf', headerName: 'X-CSRF-TOKEN' }))
+      .mockResolvedValueOnce(response(true, { id: 'mail-ananya@iitk.ac.in', name: 'Ananya', email: 'ananya@iitk.ac.in' }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderLoginPage()
+
+    fireEvent.change(screen.getByLabelText(/iitk email address/i), { target: { value: 'ananya@iitk.ac.in' } })
+    fireEvent.click(screen.getByRole('button', { name: /email me a verification code/i }))
+    fireEvent.change(await screen.findByLabelText(/six-digit verification code/i), { target: { value: '123456' } })
+    fireEvent.click(screen.getByRole('button', { name: /verify and sign in/i }))
+
+    await waitFor(() => expect(localStorage.getItem('mrlbs_active_user_profile')).toContain('ananya@iitk.ac.in'))
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'http://localhost:8080/api/auth/verify-code',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: 'ananya@iitk.ac.in', code: '123456' }) }),
     )
-
-    renderLoginPage(['/login?authenticated'])
-
-    expect(
-      await screen.findByText('Your sign-in could not be verified. Please try again.'),
-    ).toBeInTheDocument()
   })
 
-  it('does not create a local platform profile for an identity outside IITK', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ id: 'google-subject', name: 'External', email: 'external@example.com' }),
-    }))
+  it('shows backend rejection when the email is outside the configured domain', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(response(false, {}))
+      .mockResolvedValueOnce(response(true, { token: 'csrf', headerName: 'X-CSRF-TOKEN' }))
+      .mockResolvedValueOnce(response(false, { message: 'Use an email address from the @iitk.ac.in domain.' })))
+    renderLoginPage()
 
-    renderLoginPage(['/login?authenticated'])
+    fireEvent.change(screen.getByLabelText(/iitk email address/i), { target: { value: 'person@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: /email me a verification code/i }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Use the Google Workspace account for iitk.ac.in to sign in.',
-    )
+    expect(await screen.findByRole('alert')).toHaveTextContent('@iitk.ac.in domain')
     expect(localStorage.getItem('mrlbs_active_user_profile')).toBeNull()
+  })
+
+  it('does not restore a cached profile without a valid backend session', async () => {
+    setActiveUserProfile(handleUserAuthentication({ email: 'ananya@iitk.ac.in', name: 'Ananya' }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(false, {})))
+
+    renderLoginPage()
+
+    await waitFor(() => expect(localStorage.getItem('mrlbs_active_user_profile')).toBeNull())
+    expect(screen.getByRole('button', { name: /email me a verification code/i })).toBeInTheDocument()
   })
 })

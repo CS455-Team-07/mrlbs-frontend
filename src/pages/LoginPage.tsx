@@ -1,302 +1,316 @@
-import { useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { useState, type FormEvent } from 'react'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { ADMIN_SCOPES, getScopeForEmail } from '../config/adminConfig'
 import { apiClientConfig } from '../services/apiClient'
+import { ADMIN_SCOPES } from '../config/adminConfig'
 
-type LoginMode = 'choose' | 'admin' | 'member'
+interface AuthenticatedUser {
+  id: string
+  name: string
+  email: string
+  role?: string
+}
+
+interface MessageResponse {
+  message?: string
+}
+
+type LoginRole = 'member' | 'admin'
 
 export function LoginPage() {
   const { user, login } = useAuth()
-  const navigate = useNavigate()
-  const [mode, setMode] = useState<LoginMode>('choose')
+  const [selectedRole, setSelectedRole] = useState<LoginRole>('member')
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [codeSent, setCodeSent] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
 
-  // Admin state
-  const [adminEmail, setAdminEmail] = useState('')
-  const [adminError, setAdminError] = useState('')
-  const [adminLoading, setAdminLoading] = useState(false)
-
-  // Member state
-  const [memberName, setMemberName] = useState('')
-  const [memberEmail, setMemberEmail] = useState('')
-  const [memberError, setMemberError] = useState('')
-
-  // Already logged in → redirect
   if (user) {
     return <Navigate to={user.role === 'admin' ? '/admin' : '/member'} replace />
   }
 
-  // ── Admin login ─────────────────────────────────────────────────────────────
-
-  async function handleAdminLogin(e: React.FormEvent) {
-    e.preventDefault()
-    setAdminError('')
-    const normalized = adminEmail.trim().toLowerCase()
-    const scope = getScopeForEmail(normalized)
-
-    if (!scope) {
-      setAdminError(
-        'This email is not registered as an admin. Authorised admin emails are: ' +
-        ADMIN_SCOPES.map((s) => s.email).join(', '),
-      )
-      return
-    }
-
-    setAdminLoading(true)
-    try {
-      // Clear any stale member-identity cookie before switching to an admin identity
-      // so the backend DemoAuthenticationFilter never picks up the wrong cookie.
-      document.cookie = 'DEMO_MEMBER_EMAIL=; path=/; max-age=0'
-
-      // Tell the backend which admin identity this session uses
-      const res = await fetch(`${apiClientConfig.baseUrl}/demo/switch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: normalized }),
-        credentials: 'include',
-      })
-      if (!res.ok) throw new Error('Backend identity switch failed')
-
-      // Set frontend auth context
-      login({ email: normalized, name: scope.name, id: `admin-${normalized}` })
-      navigate('/admin', { replace: true })
-    } catch {
-      setAdminError('Could not complete login. Make sure the backend is running.')
-    } finally {
-      setAdminLoading(false)
+  function handleRoleChange(newRole: LoginRole) {
+    setSelectedRole(newRole)
+    setCodeSent(false)
+    setCode('')
+    setError('')
+    setNotice('')
+    if (newRole === 'admin' && !email) {
+      setEmail('lhc@iitk.ac.in')
+    } else if (newRole === 'member' && (email === 'lhc@iitk.ac.in' || email === 'gpus@iitk.ac.in' || email === 'kdlab@iitk.ac.in')) {
+      setEmail('')
     }
   }
 
-  // ── Member login ─────────────────────────────────────────────────────────────
+  async function handleLoginSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    setNotice('')
 
-  async function handleMemberLogin(e: React.FormEvent) {
-    e.preventDefault()
-    setMemberError('')
-    const normalizedEmail = memberEmail.trim().toLowerCase()
+    const trimmedEmail = email.trim().toLowerCase()
 
-    if (!normalizedEmail.endsWith('@iitk.ac.in')) {
-      setMemberError('Please use your IIT Kanpur email address (@iitk.ac.in).')
+    if (!trimmedEmail.endsWith('@iitk.ac.in')) {
+      setError('Only @iitk.ac.in email addresses are accepted.')
+      setBusy(false)
       return
     }
-    const nameToUse = memberName.trim() || normalizedEmail.split('@')[0]
 
-    try {
-      const res = await fetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: normalizedEmail, name: nameToUse }),
-        credentials: 'include',
-      })
-      if (!res.ok) {
-        throw new Error('Failed to register member session.')
+    if (selectedRole === 'admin') {
+      const isKnownAdmin = ADMIN_SCOPES.some((s) => s.email === trimmedEmail)
+      if (!isKnownAdmin) {
+        setError(`"${trimmedEmail}" is not a recognised administrator email. Please select an authorized admin account or switch to Member login.`)
+        setBusy(false)
+        return
       }
-      const memberData = (await res.json()) as { id: string; email: string; name: string }
-      login({ email: memberData.email, name: memberData.name, id: memberData.id })
-      navigate('/member', { replace: true })
-    } catch {
-      // Fallback to local login if backend is unreachable
-      login({ email: normalizedEmail, name: nameToUse })
-      navigate('/member', { replace: true })
+    }
+
+    try {
+      const response = await fetch(`${apiClientConfig.baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: trimmedEmail, role: selectedRole }),
+      })
+      const rawText = await response.text()
+      let result: { status?: string; message?: string; id?: string; name?: string; email?: string; role?: string } = {}
+      try {
+        result = JSON.parse(rawText)
+      } catch {
+        result = { message: rawText || 'Server returned an invalid response.' }
+      }
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Could not complete login request.')
+      }
+
+      if (result.status === 'LOGGED_IN') {
+        // Direct login succeeded (admin or returning member)
+        login({
+          id: result.id || `user_${Date.now()}`,
+          name: result.name || trimmedEmail.split('@')[0],
+          email: result.email || trimmedEmail,
+        })
+      } else if (result.status === 'OTP_REQUIRED') {
+        // First-time member requires OTP
+        setCodeSent(true)
+        setNotice(result.message || `First-time sign in: A verification code has been sent to ${trimmedEmail}.`)
+      }
+    } catch (requestError) {
+      if (requestError instanceof TypeError && requestError.message.includes('fetch')) {
+        setError('Cannot connect to backend server at http://localhost:8080. Please make sure the backend is running.')
+      } else {
+        setError(requestError instanceof Error ? requestError.message : 'Could not complete sign in.')
+      }
+    } finally {
+      setBusy(false)
     }
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  async function verifyCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    const trimmedEmail = email.trim().toLowerCase()
+
+    try {
+      const response = await fetch(`${apiClientConfig.baseUrl}/auth/verify-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: trimmedEmail, code: code.trim() }),
+      })
+      const rawText = await response.text()
+      let result: (AuthenticatedUser & MessageResponse) | null = null
+      try {
+        result = JSON.parse(rawText) as AuthenticatedUser & MessageResponse
+      } catch {
+        throw new Error(rawText || 'Could not verify code.')
+      }
+      if (!response.ok) throw new Error(result?.message || 'Could not verify the code.')
+      if (!result?.email || !result?.id) {
+        throw new Error('The institutional account could not be verified.')
+      }
+      login(result)
+    } catch (verifyError) {
+      if (verifyError instanceof TypeError && verifyError.message.includes('fetch')) {
+        setError('Cannot connect to backend server at http://localhost:8080. Please make sure the backend is running.')
+      } else {
+        setError(verifyError instanceof Error ? verifyError.message : 'Could not verify the code.')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <section className="my-auto flex w-full flex-col items-center">
-      {/* Page header */}
-      <div className="mb-8 text-center">
-        <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-blue-700 text-xl font-bold text-white shadow-lg">
-          MR
+      <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-blue-700 text-xl font-bold text-white shadow-lg">
+            MR
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">Sign in to MRLBS</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Multi-Resource Booking System · IIT Kanpur
+          </p>
         </div>
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
-          Welcome to MRLBS
-        </h1>
-        <p className="mt-2 text-slate-500">
-          Multi-Resource Booking System · IIT Kanpur
+
+        {/* Role Switcher Tabs */}
+        {!codeSent && (
+          <div className="mb-6 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1.5">
+            <button
+              type="button"
+              onClick={() => handleRoleChange('member')}
+              className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition ${
+                selectedRole === 'member'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>👤</span>
+              <span>Login as Member</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRoleChange('admin')}
+              className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition ${
+                selectedRole === 'admin'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>🛡️</span>
+              <span>Login as Admin</span>
+            </button>
+          </div>
+        )}
+
+        {/* Informational banner based on role */}
+        {!codeSent && (
+          <div className="mb-5 rounded-xl border border-slate-100 bg-slate-50 p-3.5 text-xs text-slate-600">
+            {selectedRole === 'member' ? (
+              <p>
+                <strong>Member Sign In:</strong> Enter your IIT Kanpur student/faculty email address. First-time sign in sends a one-time OTP code; future logins sign in directly.
+              </p>
+            ) : (
+              <div>
+                <p className="mb-2">
+                  <strong>Administrator Direct Sign In:</strong> Select an authorized admin account or enter your admin email (no OTP required):
+                </p>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {ADMIN_SCOPES.map((admin) => (
+                    <button
+                      key={admin.email}
+                      type="button"
+                      onClick={() => setEmail(admin.email)}
+                      className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
+                        email === admin.email
+                          ? 'border-blue-500 bg-blue-50 text-blue-700 font-semibold'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      {admin.name} ({admin.email})
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800" role="alert">
+            {error}
+          </div>
+        )}
+        {notice && (
+          <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800" role="status">
+            {notice}
+          </div>
+        )}
+
+        {!codeSent ? (
+          <form className="space-y-4" onSubmit={handleLoginSubmit}>
+            <div>
+              <label className="block text-sm font-medium text-slate-700" htmlFor="institutional-email">
+                {selectedRole === 'admin' ? 'Admin email address' : 'IITK member email address'}
+              </label>
+              <input
+                autoComplete="email"
+                className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                id="institutional-email"
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder={selectedRole === 'admin' ? 'lhc@iitk.ac.in' : 'username@iitk.ac.in'}
+                required
+                type="email"
+                value={email}
+              />
+            </div>
+            <button
+              className="w-full rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 disabled:opacity-60"
+              disabled={busy}
+              type="submit"
+            >
+              {busy
+                ? 'Signing in…'
+                : selectedRole === 'admin'
+                  ? 'Sign in as Administrator'
+                  : 'Continue to Sign In'}
+            </button>
+          </form>
+        ) : (
+          <form className="space-y-4" onSubmit={verifyCode}>
+            <div className="rounded-lg bg-blue-50 p-3 text-xs text-blue-900">
+              Logging in as <strong>{selectedRole.toUpperCase()}</strong> ({email})
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700" htmlFor="verification-code">
+                Enter 6-digit verification code
+              </label>
+              <input
+                autoComplete="one-time-code"
+                className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-center text-xl font-bold tracking-[0.4em] outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                id="verification-code"
+                inputMode="numeric"
+                maxLength={6}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="······"
+                required
+                value={code}
+              />
+            </div>
+            <button
+              className="w-full rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 disabled:opacity-60"
+              disabled={busy || code.length !== 6}
+              type="submit"
+            >
+              {busy ? 'Verifying…' : 'Verify and sign in'}
+            </button>
+            <button
+              className="w-full text-center text-sm font-medium text-blue-700 hover:text-blue-900"
+              disabled={busy}
+              onClick={() => {
+                setCodeSent(false)
+                setCode('')
+                setNotice('')
+                setError('')
+              }}
+              type="button"
+            >
+              ← Back to change email address
+            </button>
+          </form>
+        )}
+
+        <p className="mt-6 text-center">
+          <Link to="/" className="text-sm font-semibold text-blue-700 hover:text-blue-900">
+            Return to home
+          </Link>
         </p>
       </div>
-
-      {/* Mode: choose */}
-      {mode === 'choose' && (
-        <div className="grid w-full max-w-2xl gap-4 sm:grid-cols-2">
-          {/* Admin card */}
-          <button
-            type="button"
-            id="choose-admin-btn"
-            onClick={() => setMode('admin')}
-            className="group flex flex-col rounded-2xl border-2 border-slate-200 bg-white p-7 text-left shadow-sm transition hover:border-blue-400 hover:shadow-md"
-          >
-            <span className="mb-4 grid size-12 place-items-center rounded-xl bg-blue-50 text-2xl text-blue-700 transition group-hover:bg-blue-700 group-hover:text-white">
-              🔑
-            </span>
-            <span className="text-lg font-semibold text-slate-900">Admin Login</span>
-            <span className="mt-1 text-sm leading-6 text-slate-500">
-              For Lecture Hall, GPU, and KD Lab administrators. Manage resources for your assigned domain.
-            </span>
-            <span className="mt-5 text-sm font-semibold text-blue-700 group-hover:underline">
-              Continue as Admin →
-            </span>
-          </button>
-
-          {/* Member card */}
-          <button
-            type="button"
-            id="choose-member-btn"
-            onClick={() => setMode('member')}
-            className="group flex flex-col rounded-2xl border-2 border-slate-200 bg-white p-7 text-left shadow-sm transition hover:border-emerald-400 hover:shadow-md"
-          >
-            <span className="mb-4 grid size-12 place-items-center rounded-xl bg-emerald-50 text-2xl text-emerald-700 transition group-hover:bg-emerald-700 group-hover:text-white">
-              🎓
-            </span>
-            <span className="text-lg font-semibold text-slate-900">Member Login</span>
-            <span className="mt-1 text-sm leading-6 text-slate-500">
-              For IIT Kanpur students and staff. Browse available resources and make bookings.
-            </span>
-            <span className="mt-5 text-sm font-semibold text-emerald-700 group-hover:underline">
-              Continue as Member →
-            </span>
-          </button>
-        </div>
-      )}
-
-      {/* Mode: admin */}
-      {mode === 'admin' && (
-        <div className="w-full max-w-md">
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-            <button
-              type="button"
-              onClick={() => { setMode('choose'); setAdminError('') }}
-              className="mb-5 flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
-            >
-              ← Back
-            </button>
-            <div className="mb-6 flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-xl bg-blue-700 text-lg text-white">🔑</span>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">Admin Login</p>
-                <h2 className="text-xl font-semibold text-slate-900">Resource Administrator</h2>
-              </div>
-            </div>
-
-            {/* Admin scope badges */}
-            <div className="mb-6 flex flex-wrap gap-2">
-              {ADMIN_SCOPES.map((scope) => (
-                <span
-                  key={scope.email}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600"
-                >
-                  {scope.scopeLabel}
-                </span>
-              ))}
-            </div>
-
-            <form onSubmit={(e) => { void handleAdminLogin(e) }} className="space-y-4">
-              <label className="block text-sm font-medium text-slate-700">
-                Admin email address
-                <input
-                  id="admin-email-input"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder="e.g. lhc@iitk.ac.in"
-                  value={adminEmail}
-                  onChange={(e) => setAdminEmail(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                />
-              </label>
-
-              {adminError && (
-                <p id="admin-login-error" className="rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-700" role="alert">
-                  {adminError}
-                </p>
-              )}
-
-              <button
-                id="admin-login-submit"
-                type="submit"
-                disabled={adminLoading}
-                className="w-full rounded-xl bg-blue-700 py-3 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-wait disabled:opacity-60"
-              >
-                {adminLoading ? 'Signing in…' : 'Sign in as Admin'}
-              </button>
-            </form>
-
-            <p className="mt-4 text-xs text-slate-400">
-              Only registered domain administrators can access this area. Contact your system administrator if you need access.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Mode: member */}
-      {mode === 'member' && (
-        <div className="w-full max-w-md">
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-            <button
-              type="button"
-              onClick={() => { setMode('choose'); setMemberError('') }}
-              className="mb-5 flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
-            >
-              ← Back
-            </button>
-            <div className="mb-6 flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-xl bg-emerald-700 text-lg text-white">🎓</span>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">Member Login</p>
-                <h2 className="text-xl font-semibold text-slate-900">Student / Staff</h2>
-              </div>
-            </div>
-
-            <form onSubmit={handleMemberLogin} className="space-y-4">
-              <label className="block text-sm font-medium text-slate-700">
-                Full name (optional)
-                <input
-                  id="member-name-input"
-                  type="text"
-                  autoComplete="name"
-                  placeholder="e.g. Priya Sharma"
-                  value={memberName}
-                  onChange={(e) => setMemberName(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                />
-              </label>
-
-              <label className="block text-sm font-medium text-slate-700">
-                Institutional email address
-                <input
-                  id="member-email-input"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder="rollnumber@iitk.ac.in"
-                  value={memberEmail}
-                  onChange={(e) => setMemberEmail(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                />
-              </label>
-
-              {memberError && (
-                <p id="member-login-error" className="rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-700" role="alert">
-                  {memberError}
-                </p>
-              )}
-
-              <button
-                id="member-login-submit"
-                type="submit"
-                className="w-full rounded-xl bg-emerald-700 py-3 text-sm font-semibold text-white hover:bg-emerald-800"
-              >
-                Sign in as Member
-              </button>
-            </form>
-
-            <p className="mt-4 text-xs text-slate-400">
-              Use your @iitk.ac.in email address. Only IIT Kanpur institutional accounts are accepted.
-            </p>
-          </div>
-        </div>
-      )}
     </section>
   )
 }

@@ -32,8 +32,8 @@ export function AppRoutes() {
     <AuthProvider>
       <Routes>
         <Route element={<AppLayout />}>
-          {/* Public */}
-          <Route index element={<LandingPage />} />
+          {/* Public / Landing redirects unauthenticated users to login */}
+          <Route index element={<RequireAuth><LandingPage /></RequireAuth>} />
           <Route path="login" element={<LoginPage />} />
 
           {/* Protected — any authenticated user */}
