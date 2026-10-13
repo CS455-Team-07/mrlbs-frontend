@@ -57,6 +57,21 @@ export function AiAssistantDrawer({
     }
   }
 
+  const isPastTimeChip = (chip: string): boolean => {
+    if (!chip.includes(':')) return false
+    const targetDateStr = result?.parsedIntent?.date || currentDate
+    if (!targetDateStr) return false
+    const now = new Date()
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    if (targetDateStr !== todayStr) return false
+    const match = chip.match(/(\d{1,2}):(\d{2})/)
+    if (!match) return false
+    const [, h, m] = match
+    const chipMinutes = parseInt(h, 10) * 60 + parseInt(m, 10)
+    const nowMinutes = now.getHours() * 60 + now.getMinutes()
+    return chipMinutes <= nowMinutes
+  }
+
   const samplePrompts = [
     'I need a lecture hall for 80 people tomorrow from 10 AM to noon',
     'GPU cluster on 2026-10-15 for 2 hours',
@@ -201,7 +216,9 @@ export function AiAssistantDrawer({
                 {(result.suggestedRefinements && result.suggestedRefinements.length > 0
                   ? result.suggestedRefinements
                   : ['Lecture Hall', 'KD Lab', 'Today', 'Tomorrow']
-                ).map((chip) => (
+                )
+                  .filter((chip) => !isPastTimeChip(chip))
+                  .map((chip) => (
                   <button
                     key={chip}
                     type="button"
@@ -239,7 +256,9 @@ export function AiAssistantDrawer({
 
               {result.suggestedRefinements && result.suggestedRefinements.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {result.suggestedRefinements.map((refinement) => (
+                  {result.suggestedRefinements
+                    .filter((refinement) => !isPastTimeChip(refinement))
+                    .map((refinement) => (
                     <button
                       key={refinement}
                       type="button"
