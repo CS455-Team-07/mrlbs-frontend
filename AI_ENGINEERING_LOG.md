@@ -372,3 +372,34 @@ Pending team review.
 
 **Reason:** Admins can now configure min/max durations upfront when adding resources instead of having to configure them in a second step.
 
+
+---
+
+#### 2026-10-13 — Fix admin resource onboarding blocked by demo cookie conflict (403 Forbidden)
+
+**Date:** 2026-10-13
+
+**Task / Context:**
+Admin users (e.g. `lhc@iitk.ac.in`) were receiving `Only an Admin can onboard a resource.` (HTTP 403) when submitting the Resource Onboarding Form, even after successfully logging in via the Admin Login flow.
+
+**Prompt:**
+`why i am unable to book a resource, why am i getting like this, dont change any code just give me reason` (diagnosis request); followed by `to onboard a resource only, i am currently in lhc admin but couldnot onboard a resource, make changes such that resource onboarding by admins happens successfully.`
+
+**AI Output / Response:**
+Fixed three interlocking bugs: (1) `AuthContext.tsx` logout now clears both `DEMO_ADMIN_EMAIL` and `DEMO_MEMBER_EMAIL` cookies. (2) `LoginPage.tsx` handleAdminLogin clears `DEMO_MEMBER_EMAIL` before calling the backend /api/demo/switch endpoint, preventing the stale member cookie from shadowing the new admin identity. Corresponding backend fixes in `AuthController.java` and `DemoAuthenticationFilter.java` ensure `DEMO_ADMIN_EMAIL` is always checked first.
+
+**Student / Team Evaluation:**
+Pending human review.
+
+**Errors / Risks / Hallucinations:**
+No hallucinations. The fix is scoped to the demo-auth path; production (`mrlbs.auth.enabled=true`) is unaffected.
+
+**Changes Made After Evaluation:**
+`AuthContext.tsx`, `LoginPage.tsx` (frontend); `AuthController.java`, `DemoAuthenticationFilter.java` (backend).
+
+**Final Accepted Artifact:**
+Admin resource onboarding now succeeds from the frontend form when logged in as any scoped admin (LHC, GPU, KD Lab).
+
+**Decision:** Pending human review.
+
+**Reason:** Bug fix — demo-mode cookie priority and cleanup corrected; no change to production auth or resource creation logic.
