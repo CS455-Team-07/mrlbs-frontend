@@ -376,8 +376,12 @@ export function MemberDashboard() {
     setError('')
     try {
       const csrf = await getCsrfToken()
+      const headers: Record<string, string> = { [csrf.headerName]: csrf.token }
+      if (user?.email) {
+        headers['X-User-Email'] = user.email
+      }
       const response = await fetch(`${apiClientConfig.baseUrl}/bookings/${memberBooking.id}`, {
-        method: 'DELETE', credentials: 'include', headers: { [csrf.headerName]: csrf.token },
+        method: 'DELETE', credentials: 'include', headers,
       })
       if (!response.ok) {
         const problem = (await response.json().catch(() => null)) as ApiProblem | null
@@ -867,11 +871,13 @@ export function MemberDashboard() {
                           <span
                             className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${memberBooking.status === 'CONFIRMED'
                               ? 'bg-emerald-100 text-emerald-800'
-                              : memberBooking.status === 'PENDING' || memberBooking.status === 'PENDING_APPROVAL'
-                                ? 'bg-amber-100 text-amber-800'
-                                : memberBooking.status === 'DRAFT'
+                              : memberBooking.status === 'CANCELLED'
+                                ? 'border border-red-200 bg-red-50 text-red-700'
+                                : memberBooking.status === 'PENDING' || memberBooking.status === 'PENDING_APPROVAL'
                                   ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-slate-200 text-slate-700'
+                                  : memberBooking.status === 'DRAFT'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-slate-200 text-slate-700'
                               }`}
                           >
                             {memberBooking.status}

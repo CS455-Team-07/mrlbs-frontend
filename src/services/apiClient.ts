@@ -1,4 +1,12 @@
-const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
+// const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
+// src/services/apiClient.ts
+const baseUrl = (() => {
+  if (import.meta.env.DEV) {
+    // Development mode: point to backend running on port 8080
+    return 'http://localhost:8080/api';
+  }
+  return import.meta.env.VITE_API_BASE_URL ?? '/api';
+})();
 
 export const apiClientConfig = {
   baseUrl,

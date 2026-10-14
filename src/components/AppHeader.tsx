@@ -119,6 +119,7 @@ export function AppHeader() {
 
             <NavLink to="/" end className={linkClass} onClick={() => setMenuOpen(false)}>Home</NavLink>
             <NavLink to={dashboardPath} className={linkClass} onClick={() => setMenuOpen(false)}>Dashboard</NavLink>
+            <NavLink to="/member/history" className={linkClass} onClick={() => setMenuOpen(false)}>Booking History</NavLink>
             <NavLink to="/profile" className={linkClass} onClick={() => setMenuOpen(false)}>Profile</NavLink>
 
             {adminScope && (
