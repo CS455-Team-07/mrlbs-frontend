@@ -17,13 +17,58 @@ interface ResourceOption {
 }
 interface TimeSlot { startTime: string; endTime: string }
 interface Availability { bookedSlots: TimeSlot[]; availableSlots: TimeSlot[] }
-interface BookingResult { id: string; creditCost: number; status: string; clashes?: boolean }
+interface BookingResult {
+  id: string
+  creditCost: number
+  status: string
+  clashes?: boolean
+  waitlist?: boolean
+  queuePosition?: number
+  memberBalance?: number
+}
+interface WaitlistEntryItem {
+  id: string
+  resourceId: string
+  resourceName: string
+  resourceType: string
+  startTime: string
+  endTime: string
+  status: 'IN_PROGRESS' | 'CONFIRMED' | 'CANCELLED' | string
+  joinedAt: string
+  leftAt?: string | null
+  queuePosition?: number | null
+  bookingId?: string | null
+}
 interface MemberBooking extends BookingResult {
   startTime: string
   endTime: string
   resourceId: string
   resourceName?: string
   memberId?: string
+}
+interface WaitlistOfferItem {
+  id: string
+  waitlistEntryId: string
+  resourceId: string
+  resourceName: string
+  resourceType: string
+  startTime: string
+  endTime: string
+  creditCost: number
+  status: string
+  offeredAt: string
+  expiresAt: string
+  respondedAt?: string | null
+  resultingBookingId?: string | null
+}
+interface InAppNotificationItem {
+  id: string
+  memberId: string
+  title: string
+  message: string
+  offerId?: string | null
+  isRead: boolean
+  createdAt: string
 }
 interface ApiProblem { reasonCode?: string; detail?: string }
 
@@ -50,12 +95,31 @@ export function MemberDashboard() {
 
   // Draft and Modal States
   const [draftBooking, setDraftBooking] = useState<BookingResult | null>(null)
+  const [memberCreditBalance, setMemberCreditBalance] = useState<number | null>(null)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [rejectionModalReason, setRejectionModalReason] = useState<string | null>(null)
   const [showRejectionModal, setShowRejectionModal] = useState(false)
   const [selectedBookingDetails, setSelectedBookingDetails] = useState<MemberBooking | null>(null)
   const [showAiAssistant, setShowAiAssistant] = useState(false)
+
+  // Waitlist States
+  const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntryItem[]>([])
+  const [waitlistLoading, setWaitlistLoading] = useState(false)
+  const [waitlistError, setWaitlistError] = useState('')
+  const [waitlistSuccess, setWaitlistSuccess] = useState('')
+  const [leavingWaitlistId, setLeavingWaitlistId] = useState<string | null>(null)
+  const [bookingSuccessNotice, setBookingSuccessNotice] = useState<string | null>(null)
+
+  // Waitlist Offers & Notifications States
+  const [activeOffers, setActiveOffers] = useState<WaitlistOfferItem[]>([])
+  const [notifications, setNotifications] = useState<InAppNotificationItem[]>([])
+  const [offersLoading, setOffersLoading] = useState(false)
+  const [offerActionLoading, setOfferActionLoading] = useState<string | null>(null)
+  const [offerSuccessNotice, setOfferSuccessNotice] = useState<string | null>(null)
+  const [offerErrorNotice, setOfferErrorNotice] = useState<string | null>(null)
+  const [showNotificationsDrawer, setShowNotificationsDrawer] = useState(false)
+  const [nowTimestamp, setNowTimestamp] = useState(Date.now())
 
   const handleSelectRecommendation = async (rec: ResourceRecommendation) => {
     const chosenDate = rec.date || date
@@ -95,6 +159,7 @@ export function MemberDashboard() {
   }
 
   const isClashing = Boolean(
+    draftBooking?.waitlist ||
     draftBooking?.clashes ||
     (availability?.bookedSlots?.some((slot) => {
       const uStart = new Date(`${date}T${startTime}`).getTime()
@@ -105,28 +170,56 @@ export function MemberDashboard() {
     }))
   )
 
-  // Auto-sync member session and auto-load bookings on mount
+  // Auto-sync member session and auto-load bookings and waitlist on mount
   useEffect(() => {
     async function initMemberSession() {
       if (user?.email) {
         try {
-          await csrfFetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
+          const res = await csrfFetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: user.email, name: user.name }),
             credentials: 'include',
           })
+          if (res.ok) {
+            const data = (await res.json().catch(() => null)) as { creditsBalance?: number } | null
+            if (data?.creditsBalance != null) {
+              setMemberCreditBalance(Number(data.creditsBalance))
+            }
+          }
         } catch (e) {
           console.warn('Could not sync member session with backend', e)
         }
         void loadBookings()
+        void loadWaitlists()
+        void loadOffersAndNotifications()
       }
     }
     void initMemberSession()
   }, [user?.email, user?.name])
 
+  // Real-time ticking timer for offer countdowns
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowTimestamp(Date.now())
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // Periodic background sync for offers and notifications
+  useEffect(() => {
+    if (!user?.email) return
+    const interval = setInterval(() => {
+      void loadOffersAndNotifications()
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [user?.email])
+
   function getFriendlyErrorMessage(problem: ApiProblem | null): string {
     if (!problem) return 'The booking could not be processed.'
+    if (problem.reasonCode === 'DUPLICATE_WAITLIST') {
+      return problem.detail || 'You already have an active waitlist request for this resource and time slot.'
+    }
     if (problem.reasonCode === 'DURATION_TOO_SHORT') {
       return problem.detail || 'The booking duration is shorter than the minimum required duration for this resource.'
     }
@@ -253,6 +346,9 @@ export function MemberDashboard() {
         }
       }
       const draft = (await response.json()) as BookingResult
+      if (draft.memberBalance != null) {
+        setMemberCreditBalance(Number(draft.memberBalance))
+      }
       setDraftBooking(draft)
       setShowConfirmModal(true)
     } catch (submissionError) {
@@ -316,10 +412,19 @@ export function MemberDashboard() {
         }
       }
       const confirmed = (await response.json()) as BookingResult
+      if (confirmed.memberBalance != null) {
+        setMemberCreditBalance(Number(confirmed.memberBalance))
+      }
       setBooking(confirmed)
+      if (confirmed.waitlist || confirmed.status === 'IN_PROGRESS') {
+        setBookingSuccessNotice(`Booking request submitted successfully. Queue position: ${confirmed.queuePosition || 1}`)
+      } else {
+        setBookingSuccessNotice(`Booking confirmed! Cost: ${confirmed.creditCost} credits.`)
+      }
       setShowConfirmModal(false)
       setDraftBooking(null)
       void loadBookings()
+      void loadWaitlists()
     } catch (submissionError) {
       if (draftBooking) {
         await cancelDraft(draftBooking.id)
@@ -336,13 +441,189 @@ export function MemberDashboard() {
     setLoading(true)
     setError('')
     try {
-      const response = await fetch(`${apiClientConfig.baseUrl}/bookings`, { credentials: 'include' })
+      const headers: Record<string, string> = {}
+      if (user?.email) {
+        headers['X-User-Email'] = user.email
+      }
+      const response = await fetch(`${apiClientConfig.baseUrl}/bookings`, { credentials: 'include', headers })
       if (!response.ok) throw new Error('Your bookings could not be loaded.')
       const data = (await response.json().catch(() => null)) as unknown
       setMemberBookings(Array.isArray(data) ? (data as MemberBooking[]) : [])
     } catch (historyError) {
       setError(historyError instanceof Error ? historyError.message : 'Your bookings could not be loaded.')
     } finally { setLoading(false) }
+  }
+
+  async function loadWaitlists() {
+    setWaitlistLoading(true)
+    setWaitlistError('')
+    try {
+      const headers: Record<string, string> = {}
+      if (user?.email) {
+        headers['X-User-Email'] = user.email
+      }
+      const response = await fetch(`${apiClientConfig.baseUrl}/waitlist`, {
+        credentials: 'include',
+        headers,
+      })
+      if (!response.ok) throw new Error('Your waitlist entries could not be loaded.')
+      const data = (await response.json().catch(() => null)) as unknown
+      setWaitlistEntries(Array.isArray(data) ? (data as WaitlistEntryItem[]) : [])
+    } catch (err) {
+      setWaitlistError(err instanceof Error ? err.message : 'Your waitlist entries could not be loaded.')
+    } finally {
+      setWaitlistLoading(false)
+    }
+  }
+
+  async function leaveWaitlist(entryId: string, resourceName?: string) {
+    setLeavingWaitlistId(entryId)
+    setWaitlistError('')
+    setWaitlistSuccess('')
+    try {
+      const csrf = await getCsrfToken()
+      const headers: Record<string, string> = { [csrf.headerName]: csrf.token }
+      if (user?.email) {
+        headers['X-User-Email'] = user.email
+      }
+      const response = await fetch(`${apiClientConfig.baseUrl}/waitlist/${entryId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers,
+      })
+      if (!response.ok) {
+        const problem = (await response.json().catch(() => null)) as ApiProblem | null
+        throw new Error(problem?.detail || 'Could not leave waitlist.')
+      }
+      setWaitlistSuccess(`Successfully left the waitlist for ${resourceName || 'the resource'}.`)
+      void loadWaitlists()
+      void loadBookings()
+      void loadOffersAndNotifications()
+    } catch (err) {
+      setWaitlistError(err instanceof Error ? err.message : 'Could not leave waitlist.')
+    } finally {
+      setLeavingWaitlistId(null)
+    }
+  }
+
+  async function loadOffersAndNotifications() {
+    if (!user?.email) return
+    setOffersLoading(true)
+    try {
+      const headers: Record<string, string> = { 'X-User-Email': user.email }
+      const [offersRes, notifsRes] = await Promise.all([
+        fetch(`${apiClientConfig.baseUrl}/waitlist/offers`, { credentials: 'include', headers }),
+        fetch(`${apiClientConfig.baseUrl}/waitlist/notifications`, { credentials: 'include', headers }),
+      ])
+      if (offersRes.ok) {
+        const offersData = (await offersRes.json().catch(() => [])) as WaitlistOfferItem[]
+        setActiveOffers(Array.isArray(offersData) ? offersData : [])
+      }
+      if (notifsRes.ok) {
+        const notifsData = (await notifsRes.json().catch(() => [])) as InAppNotificationItem[]
+        setNotifications(Array.isArray(notifsData) ? notifsData : [])
+      }
+    } catch (e) {
+      console.warn('Could not load offers or notifications', e)
+    } finally {
+      setOffersLoading(false)
+    }
+  }
+
+  async function handleAcceptOffer(offerId: string) {
+    setOfferActionLoading(offerId)
+    setOfferErrorNotice(null)
+    setOfferSuccessNotice(null)
+    try {
+      const csrf = await getCsrfToken()
+      const headers: Record<string, string> = {
+        [csrf.headerName]: csrf.token,
+      }
+      if (user?.email) headers['X-User-Email'] = user.email
+
+      const res = await fetch(`${apiClientConfig.baseUrl}/waitlist/offers/${offerId}/accept`, {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+      })
+      if (!res.ok) {
+        const problem = (await res.json().catch(() => null)) as ApiProblem | null
+        if (problem?.reasonCode === 'INSUFFICIENT_CREDITS' || problem?.detail?.toLowerCase().includes('credits')) {
+          throw new Error('Insufficient credit balance: You do not have enough credits to confirm this offer. Please top up your account balance or decline the offer.')
+        }
+        throw new Error(problem?.detail || 'Failed to confirm booking.')
+      }
+      setOfferSuccessNotice('Booking confirmed successfully! Your credits have been deducted.')
+      void loadOffersAndNotifications()
+      void loadBookings()
+      void loadWaitlists()
+    } catch (err) {
+      setOfferErrorNotice(err instanceof Error ? err.message : 'Failed to confirm booking.')
+    } finally {
+      setOfferActionLoading(null)
+    }
+  }
+
+  async function handleDeclineOffer(offerId: string) {
+    setOfferActionLoading(offerId)
+    setOfferErrorNotice(null)
+    setOfferSuccessNotice(null)
+    try {
+      const csrf = await getCsrfToken()
+      const headers: Record<string, string> = {
+        [csrf.headerName]: csrf.token,
+      }
+      if (user?.email) headers['X-User-Email'] = user.email
+
+      const res = await fetch(`${apiClientConfig.baseUrl}/waitlist/offers/${offerId}/decline`, {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+      })
+      if (!res.ok) {
+        const problem = (await res.json().catch(() => null)) as ApiProblem | null
+        throw new Error(problem?.detail || 'Failed to decline offer.')
+      }
+      setOfferSuccessNotice('Offer declined. Your waitlist entry has been updated.')
+      void loadOffersAndNotifications()
+      void loadWaitlists()
+      void loadBookings()
+    } catch (err) {
+      setOfferErrorNotice(err instanceof Error ? err.message : 'Failed to decline offer.')
+    } finally {
+      setOfferActionLoading(null)
+    }
+  }
+
+  async function markNotificationAsRead(id: string) {
+    try {
+      const csrf = await getCsrfToken()
+      const headers: Record<string, string> = {
+        [csrf.headerName]: csrf.token,
+      }
+      if (user?.email) headers['X-User-Email'] = user.email
+
+      await fetch(`${apiClientConfig.baseUrl}/waitlist/notifications/${id}/read`, {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+      })
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)))
+    } catch (e) {
+      console.warn('Could not mark notification as read', e)
+    }
+  }
+
+  function getOfferRemainingSeconds(expiresAtStr: string) {
+    const expiresAt = new Date(expiresAtStr).getTime()
+    return Math.max(0, Math.floor((expiresAt - nowTimestamp) / 1000))
+  }
+
+  function formatCountdown(seconds: number) {
+    if (seconds <= 0) return 'Expired'
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m}m ${s < 10 ? '0' : ''}${s}s`
   }
 
   async function modifyBooking(event: FormEvent<HTMLFormElement>) {
@@ -399,6 +680,7 @@ export function MemberDashboard() {
         }
       }
       void loadBookings()
+      void loadWaitlists()
     } catch (cancellationError) {
       setError(cancellationError instanceof Error ? cancellationError.message : 'The booking could not be cancelled.')
     } finally { setLoading(false) }
@@ -426,16 +708,36 @@ export function MemberDashboard() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Find and book a resource</h1>
           <p className="mt-3 max-w-2xl text-slate-600">Search by resource type, date, and capacity. Review availability and submit a booking.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowAiAssistant(true)}
-          className="self-start sm:self-center inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-indigo-700 transition"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-          Ask AI Assistant
-        </button>
+        <div className="flex items-center gap-3">
+          {/* In-app Notification Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setShowNotificationsDrawer(true)}
+            className="relative inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            title="In-app Notifications"
+          >
+            <svg className="h-5 w-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            <span>Notifications</span>
+            {notifications.filter((n) => !n.isRead).length > 0 && (
+              <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-rose-600 px-1 text-xs font-bold text-white">
+                {notifications.filter((n) => !n.isRead).length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowAiAssistant(true)}
+            className="self-start sm:self-center inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-indigo-700 transition"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Ask AI Assistant
+          </button>
+        </div>
       </header>
 
       {/* ── Search form ────────────────────────────────────────────── */}
@@ -563,11 +865,11 @@ export function MemberDashboard() {
                       className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800"
                       role="status"
                     >
-                      {booking.status === 'PENDING_APPROVAL'
+                      {bookingSuccessNotice || (booking.status === 'PENDING_APPROVAL'
                         ? 'Booking submitted successfully! Waiting for approval.'
                         : booking.status === 'IN_PROGRESS'
-                          ? 'Booking submitted!'
-                          : 'Booking confirmed!'} Cost: {booking.creditCost} credits.
+                          ? `Booking request submitted successfully. Queue position: ${booking.queuePosition || 1}`
+                          : `Booking confirmed! Cost: ${booking.creditCost} credits.`)}
                     </p>
                   )}
                   <div className="flex justify-end gap-3">
@@ -605,13 +907,20 @@ export function MemberDashboard() {
             </button>
 
             <div className="mb-6 flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-xl bg-blue-700 text-lg text-white">📋</span>
-              <h3 className="text-xl font-semibold text-slate-900">Review & Confirm Booking</h3>
+              <span className={`grid size-10 place-items-center rounded-xl text-lg text-white ${isClashing ? 'bg-amber-600' : 'bg-blue-700'}`}>
+                {isClashing ? '⏳' : '📋'}
+              </span>
+              <h3 className="text-xl font-semibold text-slate-900">
+                {isClashing ? 'Slot Unavailable — Join Waitlist' : 'Review & Confirm Booking'}
+              </h3>
             </div>
 
             {isClashing && (
-              <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-sm font-medium text-amber-900">
-                <p>it clashes with the already booked slot, it may not get booked,</p>
+              <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 space-y-1">
+                <p className="font-semibold">This slot is currently unavailable.</p>
+                <p className="text-amber-900">
+                  The requested time slot is occupied by an existing booking. Would you like to join the waitlist for this slot?
+                </p>
               </div>
             )}
 
@@ -634,18 +943,34 @@ export function MemberDashboard() {
                   ? 'bg-emerald-100 text-emerald-800'
                   : isClashing
                     ? 'bg-amber-100 text-amber-800'
-                    : 'bg-amber-100 text-amber-800'
+                    : 'bg-emerald-100 text-emerald-800'
                   }`}>
                   {selectedResource.bookingRule?.bookingPolicy === 'APPROVAL_REQUIRED'
                     ? 'PENDING_APPROVAL'
                     : isClashing
-                      ? 'WILL BE IN_PROGRESS'
+                      ? 'WAITLIST (IN_PROGRESS)'
                       : 'DRAFT (Unreserved)'}
                 </span>
               </div>
+              {isClashing && (
+                <div className="flex justify-between border-t border-slate-200 pt-3">
+                  <span className="text-slate-500">Queue Position</span>
+                  <span className="font-bold text-amber-900">
+                    #{draftBooking.queuePosition || 1} in queue
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between border-t border-slate-200 pt-3">
                 <span className="text-slate-500">Required Credits</span>
-                <span className="text-base font-bold text-blue-700">{draftBooking.creditCost} Credits</span>
+                <span className="text-base font-bold text-blue-700">
+                  {draftBooking.creditCost} Credits
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-slate-200 pt-3">
+                <span className="text-slate-500">Current Member Balance</span>
+                <span className="text-base font-bold text-emerald-700">
+                  {draftBooking.memberBalance ?? memberCreditBalance ?? 0} Credits
+                </span>
               </div>
             </div>
 
@@ -653,7 +978,7 @@ export function MemberDashboard() {
               {selectedResource.bookingRule?.bookingPolicy === 'APPROVAL_REQUIRED'
                 ? 'This resource requires approval. Your request will be submitted and marked as pending approval.'
                 : isClashing
-                  ? 'Because this time window overlaps with an already booked slot, confirming will submit your request with status IN_PROGRESS.'
+                  ? `${draftBooking.creditCost} credits will be deducted upon joining the waitlist (IN_PROGRESS). If cancelled, your credits will be fully refunded.`
                   : 'Slots are not held and credits are not deducted while in draft. On confirmation, the slot will be locked and credits will be debited.'}
             </p>
 
@@ -788,6 +1113,244 @@ export function MemberDashboard() {
         </div>
       )}
 
+      {/* ── Active Waitlist Offers Section (Phase 3: Offers & Notifications) ────── */}
+      {activeOffers.length > 0 && (
+        <section aria-label="Waitlist offers" className="mt-8 rounded-2xl border-2 border-emerald-500 bg-gradient-to-br from-emerald-50/70 via-white to-blue-50/50 p-6 shadow-md">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-emerald-100 pb-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-3 w-3 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Waitlist Offers — Slot Available!</h2>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  A requested slot has been released. Confirm your booking before the offer expires.
+                </p>
+              </div>
+            </div>
+            <button
+              className="self-start sm:self-auto rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+              disabled={offersLoading}
+              onClick={() => void loadOffersAndNotifications()}
+              type="button"
+            >
+              {offersLoading ? 'Refreshing…' : 'Refresh offers'}
+            </button>
+          </div>
+
+          {/* Feedback alerts */}
+          {offerSuccessNotice && (
+            <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-100/70 p-3 text-sm font-semibold text-emerald-900">
+              <span>{offerSuccessNotice}</span>
+              <button
+                type="button"
+                onClick={() => setOfferSuccessNotice(null)}
+                className="text-emerald-800 hover:text-emerald-950 text-xs font-bold ml-2"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {offerErrorNotice && (
+            <div className="mt-4 flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-900">
+              <span>{offerErrorNotice}</span>
+              <button
+                type="button"
+                onClick={() => setOfferErrorNotice(null)}
+                className="text-rose-800 hover:text-rose-950 text-xs font-bold ml-2"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          <div className="mt-5 space-y-4">
+            {activeOffers.map((offer) => {
+              const secondsLeft = getOfferRemainingSeconds(offer.expiresAt)
+              const isExpired = secondsLeft <= 0
+              const isProcessing = offerActionLoading === offer.id
+
+              return (
+                <div
+                  key={offer.id}
+                  className="flex flex-col justify-between gap-4 rounded-xl border border-emerald-200 bg-white p-5 shadow-sm transition sm:flex-row sm:items-center"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-md bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 uppercase tracking-wide">
+                        {offer.resourceType || 'Resource'}
+                      </span>
+                      <h3 className="text-lg font-bold text-slate-900">{offer.resourceName}</h3>
+                    </div>
+
+                    <p className="text-sm text-slate-700 font-medium">
+                      📅 Date: {offer.startTime.slice(0, 10)} · ⏱ Time: {offer.startTime.replace('T', ' ').slice(11, 16)} - {offer.endTime.replace('T', ' ').slice(11, 16)}
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-semibold text-blue-700 border border-blue-200">
+                        💰 Preserved Cost: {offer.creditCost} Credits (Locked)
+                      </span>
+                      <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 font-bold border ${
+                        isExpired
+                          ? 'bg-rose-50 text-rose-700 border-rose-200'
+                          : secondsLeft < 60
+                            ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      }`}>
+                        ⏳ {isExpired ? 'Offer Expired' : `Expires in: ${formatCountdown(secondsLeft)}`}
+                      </span>
+                      <span className="text-slate-400">
+                        Expires at: {offer.expiresAt.replace('T', ' ').slice(11, 19)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2 sm:pt-0">
+                    <button
+                      type="button"
+                      disabled={isExpired || isProcessing}
+                      onClick={() => void handleAcceptOffer(offer.id)}
+                      className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    >
+                      {isProcessing ? 'Processing…' : 'Confirm Booking'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isProcessing}
+                      onClick={() => void handleDeclineOffer(offer.id)}
+                      className="inline-flex items-center justify-center rounded-xl border border-rose-300 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50 transition"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ── My Waitlist Section (Phase 1: Waitlist Management) ────── */}
+      <section aria-label="My waitlist" className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-semibold text-slate-900">My waitlist requests</h2>
+            {waitlistEntries.filter((e) => e.status === 'IN_PROGRESS').length > 0 && (
+              <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800">
+                {waitlistEntries.filter((e) => e.status === 'IN_PROGRESS').length} active
+              </span>
+            )}
+          </div>
+          <button
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            disabled={waitlistLoading}
+            onClick={() => void loadWaitlists()}
+            type="button"
+          >
+            {waitlistLoading ? 'Refreshing…' : 'Refresh waitlist'}
+          </button>
+        </div>
+
+        {/* Feedback alerts */}
+        {waitlistSuccess && (
+          <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-sm font-medium text-emerald-800">
+            <span>{waitlistSuccess}</span>
+            <button
+              type="button"
+              onClick={() => setWaitlistSuccess('')}
+              className="text-emerald-700 hover:text-emerald-900 text-xs font-semibold ml-2"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {waitlistError && (
+          <div className="mt-4 flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm font-medium text-red-800">
+            <span>{waitlistError}</span>
+            <button
+              type="button"
+              onClick={() => setWaitlistError('')}
+              className="text-red-700 hover:text-red-900 text-xs font-semibold ml-2"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {waitlistLoading && waitlistEntries.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">Loading waitlist entries…</p>
+        ) : waitlistEntries.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-600">
+            You have no waitlist requests. When a requested resource slot is fully booked, you can join its waitlist.
+          </p>
+        ) : (
+          <div className="mt-6 space-y-3">
+            {waitlistEntries.map((entry) => {
+              const isActive = entry.status === 'IN_PROGRESS'
+              const isAllocated = entry.status === 'CONFIRMED'
+              const isLeft = entry.status === 'CANCELLED'
+
+              return (
+                <article
+                  key={entry.id}
+                  className="flex flex-col justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition hover:border-slate-300 hover:shadow-sm sm:flex-row sm:items-center"
+                >
+                  <div>
+                    <h4 className="font-semibold text-slate-900">
+                      {entry.resourceName || `Resource: ${entry.resourceId.slice(0, 8)}…`}
+                    </h4>
+                    <p className="mt-1 text-sm text-slate-600">
+                      📅 {entry.startTime.slice(0, 10)} · ⏱ {entry.startTime.replace('T', ' ').slice(11, 16)} - {entry.endTime.replace('T', ' ').slice(11, 16)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Joined: {entry.joinedAt ? entry.joinedAt.replace('T', ' ').slice(0, 16) : 'N/A'}
+                      {entry.leftAt && ` · Left: ${entry.leftAt.replace('T', ' ').slice(0, 16)}`}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col items-start gap-2 sm:items-end">
+                    <div className="flex items-center gap-2">
+                      {isActive && entry.queuePosition != null && (
+                        <span className="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800">
+                          Queue position: {entry.queuePosition}
+                        </span>
+                      )}
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${
+                          isActive
+                            ? 'bg-amber-100 text-amber-800'
+                            : isAllocated
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : isLeft
+                                ? 'border border-slate-200 bg-slate-100 text-slate-600'
+                                : 'bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {isActive ? 'WAITING' : isAllocated ? 'ALLOCATED' : entry.status}
+                      </span>
+                      {isActive && (
+                        <button
+                          type="button"
+                          onClick={() => void leaveWaitlist(entry.id, entry.resourceName)}
+                          disabled={leavingWaitlistId === entry.id}
+                          className="rounded-lg border border-red-300 bg-white px-2.5 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                        >
+                          {leavingWaitlistId === entry.id ? 'Leaving…' : 'Leave waitlist'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
       {/* ── My bookings Grouped by Date (FR-5.1 & US-5) ───────────── */}
       <section aria-label="My bookings" className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between gap-4">
@@ -917,6 +1480,74 @@ export function MemberDashboard() {
         currentDate={date}
         onSelectRecommendation={handleSelectRecommendation}
       />
+
+      {/* ── In-App Notifications Drawer (Phase 3) ─────────────────── */}
+      {showNotificationsDrawer && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-sm transition-opacity">
+          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col h-full border-l border-slate-200 animate-slide-left">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div className="flex items-center gap-2">
+                <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                <h3 className="text-lg font-bold text-slate-900">Notifications</h3>
+                {notifications.filter((n) => !n.isRead).length > 0 && (
+                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-700">
+                    {notifications.filter((n) => !n.isRead).length} new
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNotificationsDrawer(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              >
+                <span className="sr-only">Close</span>
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {notifications.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                  <p className="text-sm">You have no notifications right now.</p>
+                </div>
+              ) : (
+                notifications.map((notif) => (
+                  <article
+                    key={notif.id}
+                    className={`rounded-xl border p-4 transition ${
+                      notif.isRead
+                        ? 'border-slate-200 bg-slate-50/50 text-slate-700'
+                        : 'border-blue-200 bg-blue-50/60 shadow-sm text-slate-900'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="text-sm font-bold">{notif.title}</h4>
+                      {!notif.isRead && (
+                        <span className="h-2 w-2 rounded-full bg-blue-600 mt-1 flex-shrink-0" />
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-slate-600 leading-relaxed">{notif.message}</p>
+                    <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
+                      <span>{notif.createdAt ? notif.createdAt.replace('T', ' ').slice(0, 16) : ''}</span>
+                      {!notif.isRead && (
+                        <button
+                          type="button"
+                          onClick={() => void markNotificationAsRead(notif.id)}
+                          className="font-semibold text-blue-700 hover:text-blue-900"
+                        >
+                          Mark as read
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
