@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { getScopeForEmail } from '../config/adminConfig'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
 
 export function AppHeader() {
   const { user, isAuthenticated, logout } = useAuth()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [approvalCount, setApprovalCount] = useState(0)
 
   const dashboardPath =
     user?.role?.toLowerCase() === 'admin' ? '/admin' : '/member'
@@ -19,6 +22,31 @@ export function AppHeader() {
     `block rounded-lg px-4 py-2.5 text-sm font-medium transition ${
       isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'
     }`
+
+  useEffect(() => {
+    if (!isAuthenticated || user?.role !== 'admin') {
+      setApprovalCount(0)
+      return
+    }
+
+    let cancelled = false
+
+    void fetch(`${API_BASE_URL}/bookings/approvals`, { credentials: 'include' })
+      .then(async (response) => {
+        if (!response.ok) return []
+        return (await response.json()) as Array<{ id: string }>
+      })
+      .then((data) => {
+        if (!cancelled) setApprovalCount(Array.isArray(data) ? data.length : 0)
+      })
+      .catch(() => {
+        if (!cancelled) setApprovalCount(0)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated, user?.role, user?.email])
 
   function handleLogout() {
     void logout().finally(() => navigate('/login', { replace: true }))
@@ -119,6 +147,18 @@ export function AppHeader() {
 
             <NavLink to="/" end className={linkClass} onClick={() => setMenuOpen(false)}>Home</NavLink>
             <NavLink to={dashboardPath} className={linkClass} onClick={() => setMenuOpen(false)}>Dashboard</NavLink>
+            {user?.role === 'admin' && (
+              <NavLink to="/admin/approvals" className={linkClass} onClick={() => setMenuOpen(false)}>
+                <span className="flex items-center justify-between gap-2">
+                  <span>Approval Requests</span>
+                  {approvalCount > 0 && (
+                    <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                      {approvalCount}
+                    </span>
+                  )}
+                </span>
+              </NavLink>
+            )}
             <NavLink to="/member/history" className={linkClass} onClick={() => setMenuOpen(false)}>Booking History</NavLink>
             <NavLink to="/profile" className={linkClass} onClick={() => setMenuOpen(false)}>Profile</NavLink>
 

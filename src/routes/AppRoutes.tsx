@@ -48,6 +48,10 @@ export function AppRoutes() {
             path="admin"
             element={<RequireRole role="admin"><AdminDashboard /></RequireRole>}
           />
+          <Route
+            path="admin/approvals"
+            element={<RequireRole role="admin"><AdminDashboard /></RequireRole>}
+          />
 
           {/* Protected — member only */}
           <Route

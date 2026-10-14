@@ -169,6 +169,35 @@ Proposed BOOK-10 frontend OAuth sign-in and callback handling.
 **Decision:**\
 Modified; implementation prepared for review.
 
+#### 2026-10-14 — Admin approval queue and scoped notifications
+
+**Task / Context:**\
+Implement the missing admin approval request queue and in-app notification count for approval-required bookings so the correct scoped admin can review only their resource type.
+
+**Prompt:**\
+“now can we implement the sending approval requests to that particular resource admin (in side bar(nav bar) there should be option approval requests where admin can see the booking requests) and in-app notications to that particular admin should be sent when the member clicks the confirm booking for the approval-required resources”
+
+**AI Output:**\
+Added a backend approval queue API with admin-scoped filtering and a frontend sidebar badge plus admin dashboard request list that allows approve/reject decisions for pending approval jobs.
+
+**Student/Team Evaluation:**\
+This is a focused, low-risk solution aligned with the existing demo-email admin scope model. The implementation avoids creating a separate notification infrastructure and instead surfaces pending approvals as a live admin queue count and request list.
+
+**Errors / Risks / Hallucinations:**\
+No notification broker or push channel exists in this project, so the implementation uses the approved in-app queue pattern rather than a real-time push service.
+
+**Changes Made After Evaluation:**\
+Updated the sidebar navigation, added the `/admin/approvals` route, added the approval queue panel in the admin dashboard, hooked it to `/api/bookings/approvals`, and fixed the generated frontend TypeScript test issue by switching from `global` to `globalThis`.
+
+**Final Accepted Artifact:**\
+`src/components/AppHeader.tsx`, `src/routes/AppRoutes.tsx`, `src/pages/AdminDashboard.tsx`, and `src/pages/MemberHistory.test.tsx`.
+
+**Decision:**\
+Accepted
+
+**Reason:**\
+It meets the request for a scoped admin queue and approval notifications with the project’s existing architecture and without broad feature expansion.
+
 #### 2026-10-11 — Correct OAuth backend origin
 
 **Task / Context:**\

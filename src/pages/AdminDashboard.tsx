@@ -22,6 +22,16 @@ type ResourceDraft = {
   bufferTimeMinutes: number
   maxBookingsPerMember: number
 }
+
+type ApprovalRequest = {
+  id: string
+  memberEmail: string
+  resourceName: string
+  resourceType: string
+  startTime: string
+  endTime: string
+  status: string
+}
 const makeDraft = (resource: Resource): ResourceDraft => ({
   name: resource.name ?? '',
   type: resource.type ?? '',
@@ -50,6 +60,10 @@ export function AdminDashboard() {
   const [inactiveResources, setInactiveResources] = useState<Resource[]>([])
   const [restoringId, setRestoringId] = useState<string | number | null>(null)
   const [restoreError, setRestoreError] = useState('')
+  const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([])
+  const [approvalLoading, setApprovalLoading] = useState(false)
+  const [approvalError, setApprovalError] = useState('')
+  const [processingApprovalIds, setProcessingApprovalIds] = useState<Set<string>>(new Set())
 
   const fetchResources = async () => {
     try {
@@ -92,14 +106,43 @@ export function AdminDashboard() {
     }
   }
 
+  const fetchApprovalRequests = async () => {
+    if (user?.role !== 'admin') {
+      setApprovalRequests([])
+      return
+    }
+
+    try {
+      setApprovalLoading(true)
+      const response = await fetch(`${API_BASE_URL}/bookings/approvals`, {
+        credentials: 'include',
+      })
+      if (!response.ok) {
+        throw new Error('Failed to load approval requests')
+      }
+      const data = (await response.json()) as ApprovalRequest[]
+      const sorted = [...data].sort(
+        (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+      )
+      setApprovalRequests(sorted)
+      setApprovalError('')
+    } catch (error) {
+      console.error('Failed to load approval requests:', error)
+      setApprovalError('Unable to load approval requests right now.')
+      setApprovalRequests([])
+    } finally {
+      setApprovalLoading(false)
+    }
+  }
+
   useEffect(() => {
     const loadResources = async () => {
       await Promise.resolve()
-      await Promise.all([fetchResources(), fetchInactiveResources()])
+      await Promise.all([fetchResources(), fetchInactiveResources(), user?.role === 'admin' ? fetchApprovalRequests() : Promise.resolve()])
     }
 
     void loadResources()
-  }, [requiredType])
+  }, [requiredType, user?.role, user?.email])
 
   const updateDraft = (resourceId: string | number, field: keyof ResourceDraft, value: string | number) => {
     setDrafts((current) => ({
@@ -165,6 +208,30 @@ export function AdminDashboard() {
     }
   }
 
+  const handleApprovalDecision = async (bookingId: string, approved: boolean) => {
+    try {
+      setProcessingApprovalIds((current) => new Set([...current, bookingId]))
+      const response = await csrfFetch(`${API_BASE_URL}/bookings/${bookingId}/${approved ? 'approve' : 'reject'}`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        throw new Error(approved ? 'Unable to approve booking' : 'Unable to reject booking')
+      }
+
+      await fetchApprovalRequests()
+    } catch (error) {
+      console.error(error)
+      setApprovalError('Could not update the booking request. Please try again.')
+    } finally {
+      setProcessingApprovalIds((current) => {
+        const next = new Set(current)
+        next.delete(bookingId)
+        return next
+      })
+    }
+  }
+
   const handleRestore = async (resourceId: string | number) => {
     try {
       setRestoringId(resourceId)
@@ -208,6 +275,12 @@ export function AdminDashboard() {
     }
   }
 
+  const approvalGroups = approvalRequests.reduce<Record<string, ApprovalRequest[]>>((groups, request) => {
+    const key = new Date(request.startTime).toISOString().slice(0, 10)
+    groups[key] = [...(groups[key] ?? []), request]
+    return groups
+  }, {})
+
   if (!user) {
     return (
       <section className="my-auto rounded-2xl border border-slate-200 bg-white p-8 shadow-sm text-center">
@@ -217,6 +290,83 @@ export function AdminDashboard() {
   }
   return (
     <section className="my-auto mx-auto w-full max-w-5xl py-6 space-y-6">
+      {user?.role === 'admin' && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Approval queue</p>
+              <h3 className="mt-2 text-xl font-semibold text-slate-900">Pending booking requests</h3>
+            </div>
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-800">
+              {approvalRequests.length}
+            </span>
+          </div>
+
+          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Requests are reviewed in submission order when multiple members request the same resource and time slot.
+          </p>
+
+          {approvalLoading ? (
+            <p className="mt-4 text-sm text-slate-500">Loading approval requests...</p>
+          ) : approvalError ? (
+            <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {approvalError}
+            </p>
+          ) : approvalRequests.length === 0 ? (
+            <p className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              No pending bookings for your resource scope.
+            </p>
+          ) : (
+            <div className="mt-4 space-y-5">
+              {Object.entries(approvalGroups)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([dateKey, requests]) => (
+                  <div key={dateKey} className="space-y-3">
+                    <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                      {new Date(`${dateKey}T00:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </h4>
+                    {requests.map((request) => (
+                      <div key={request.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{request.resourceName}</p>
+                            <p className="text-xs uppercase tracking-wide text-slate-500">{request.resourceType}</p>
+                          </div>
+                          <div className="text-sm text-slate-600">
+                            <div>{request.memberEmail}</div>
+                            <div>
+                              {new Date(request.startTime).toLocaleString([], { timeStyle: 'short' })} - {' '}
+                              {new Date(request.endTime).toLocaleString([], { timeStyle: 'short' })}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-4 flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleApprovalDecision(request.id, false)}
+                            disabled={processingApprovalIds.has(request.id)}
+                            className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                          >
+                            {processingApprovalIds.has(request.id) ? 'Updating...' : 'Reject'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleApprovalDecision(request.id, true)}
+                            disabled={processingApprovalIds.has(request.id)}
+                            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                          >
+                            {processingApprovalIds.has(request.id) ? 'Updating...' : 'Approve'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <p className="text-sm font-semibold text-purple-700">Admin area</p>
         <div className="mt-2 flex flex-wrap items-center gap-3">

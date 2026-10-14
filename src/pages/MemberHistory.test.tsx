@@ -46,7 +46,7 @@ describe('MemberHistory', () => {
       },
     ]
 
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
       ok: true,
       json: async () => mockBookings,
     } as Response)
@@ -73,7 +73,7 @@ describe('MemberHistory', () => {
   })
 
   it('handles empty states gracefully', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
       ok: true,
       json: async () => [],
     } as Response)
@@ -91,7 +91,7 @@ describe('MemberHistory', () => {
   })
 
   it('displays error message when request fails', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,
       status: 500,
     } as Response)
