@@ -23,6 +23,17 @@ type ResourceDraft = {
   maxBookingsPerMember: number
 }
 
+type AiReviewSummary = {
+  recommendation?: 'RECOMMEND_APPROVAL' | 'RECOMMEND_REJECTION' | 'NEEDS_HUMAN_REVIEW'
+  confidenceScore?: number
+  rationale?: string
+  supportingEvidence?: string
+  dataLimitations?: string
+  isDemonstrationData?: boolean
+  status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'FALLBACK_HUMAN_ONLY'
+  modelName?: string
+}
+
 type ApprovalRequest = {
   id: string
   memberEmail: string
@@ -31,6 +42,7 @@ type ApprovalRequest = {
   startTime: string
   endTime: string
   status: string
+  aiReview?: AiReviewSummary | null
 }
 const makeDraft = (resource: Resource): ResourceDraft => ({
   name: resource.name ?? '',
@@ -64,6 +76,16 @@ export function AdminDashboard() {
   const [approvalLoading, setApprovalLoading] = useState(false)
   const [approvalError, setApprovalError] = useState('')
   const [processingApprovalIds, setProcessingApprovalIds] = useState<Set<string>>(new Set())
+  const [expandedReviewIds, setExpandedReviewIds] = useState<Set<string>>(new Set())
+
+  const toggleReviewExpanded = (id: string) => {
+    setExpandedReviewIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const fetchResources = async () => {
     try {
@@ -340,23 +362,117 @@ export function AdminDashboard() {
                             </div>
                           </div>
                         </div>
-                        <div className="mt-4 flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void handleApprovalDecision(request.id, false)}
-                            disabled={processingApprovalIds.has(request.id)}
-                            className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
-                          >
-                            {processingApprovalIds.has(request.id) ? 'Updating...' : 'Reject'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void handleApprovalDecision(request.id, true)}
-                            disabled={processingApprovalIds.has(request.id)}
-                            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                          >
-                            {processingApprovalIds.has(request.id) ? 'Updating...' : 'Approve'}
-                          </button>
+                        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="flex-1 min-w-0 pr-0 sm:pr-4">
+                            {(() => {
+                              const ai = request.aiReview
+                              if (!ai || ai.status === 'PENDING') {
+                                return (
+                                  <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2 text-xs font-medium text-slate-600 animate-pulse">
+                                    <span>🤖</span>
+                                    <span>AI evaluation in progress...</span>
+                                  </div>
+                                )
+                              }
+                              if (ai.status === 'FALLBACK_HUMAN_ONLY' || ai.status === 'FAILED') {
+                                return (
+                                  <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-xs text-slate-600">
+                                    <span>🤖</span>
+                                    <span><strong>Advisory:</strong> Manual review only (AI offline)</span>
+                                  </div>
+                                )
+                              }
+
+                              const isExpanded = expandedReviewIds.has(request.id)
+                              const rec = ai.recommendation
+                              let badgeColor = 'border-amber-200 bg-amber-50 text-amber-900'
+                              let label = 'Needs Human Review'
+                              let icon = '⚠️'
+
+                              if (rec === 'RECOMMEND_APPROVAL') {
+                                badgeColor = 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                                label = 'Recommend Approval'
+                                icon = '✅'
+                              } else if (rec === 'RECOMMEND_REJECTION') {
+                                badgeColor = 'border-rose-200 bg-rose-50 text-rose-900'
+                                label = 'Recommend Rejection'
+                                icon = '🛑'
+                              }
+
+                              const confPct = ai.confidenceScore != null ? Math.round(ai.confidenceScore * 100) : null
+
+                              return (
+                                <div className={`rounded-xl border p-2.5 text-xs shadow-sm transition-all ${badgeColor}`}>
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5 font-semibold">
+                                      <span>{icon}</span>
+                                      <span>AI: {label}</span>
+                                      {confPct != null && (
+                                        <span className="font-normal opacity-80">({confPct}% confidence)</span>
+                                      )}
+                                    </div>
+                                    {(ai.supportingEvidence || ai.dataLimitations) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleReviewExpanded(request.id)}
+                                        className="text-[11px] font-medium underline opacity-80 hover:opacity-100 cursor-pointer"
+                                      >
+                                        {isExpanded ? 'Hide details' : 'View evidence'}
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {ai.rationale && (
+                                    <p className="mt-1 text-[11px] leading-relaxed opacity-95">
+                                      {ai.rationale}
+                                    </p>
+                                  )}
+
+                                  {isExpanded && (
+                                    <div className="mt-2 space-y-1.5 border-t border-current/15 pt-2 text-[11px]">
+                                      {ai.supportingEvidence && (
+                                        <div>
+                                          <span className="font-semibold">Supporting Evidence: </span>
+                                          <span className="opacity-90">{ai.supportingEvidence}</span>
+                                        </div>
+                                      )}
+                                      {ai.dataLimitations && (
+                                        <div>
+                                          <span className="font-semibold">Limitations: </span>
+                                          <span className="opacity-90">{ai.dataLimitations}</span>
+                                        </div>
+                                      )}
+                                      {ai.isDemonstrationData && (
+                                        <div className="mt-1">
+                                          <span className="inline-block rounded bg-black/10 px-1.5 py-0.5 text-[10px] font-medium">
+                                            Demonstration Telemetry
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })()}
+                          </div>
+                          <div className="flex shrink-0 justify-end gap-2 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => void handleApprovalDecision(request.id, false)}
+                              disabled={processingApprovalIds.has(request.id)}
+                              className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60 cursor-pointer"
+                            >
+                              {processingApprovalIds.has(request.id) ? 'Updating...' : 'Reject'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleApprovalDecision(request.id, true)}
+                              disabled={processingApprovalIds.has(request.id)}
+                              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
+                            >
+                              {processingApprovalIds.has(request.id) ? 'Updating...' : 'Approve'}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
