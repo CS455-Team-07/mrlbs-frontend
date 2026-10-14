@@ -11,6 +11,9 @@ interface ResourceOption {
   location: string
   capacity: number | null
   available: boolean
+  bookingRule?: {
+    bookingPolicy?: string
+  }
 }
 interface TimeSlot { startTime: string; endTime: string }
 interface Availability { bookedSlots: TimeSlot[]; availableSlots: TimeSlot[] }
@@ -556,7 +559,11 @@ export function MemberDashboard() {
                       className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800"
                       role="status"
                     >
-                      {booking.status === 'IN_PROGRESS' ? 'Booking submitted!' : 'Booking confirmed!'} Cost: {booking.creditCost} credits.
+                      {booking.status === 'PENDING_APPROVAL'
+                        ? 'Booking submitted successfully! Waiting for approval.'
+                        : booking.status === 'IN_PROGRESS'
+                          ? 'Booking submitted!'
+                          : 'Booking confirmed!'} Cost: {booking.creditCost} credits.
                     </p>
                   )}
                   <div className="flex justify-end gap-3">
@@ -619,9 +626,17 @@ export function MemberDashboard() {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Status</span>
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${isClashing ? 'bg-amber-100 text-amber-800' : 'bg-amber-100 text-amber-800'
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${selectedResource.bookingRule?.bookingPolicy === 'APPROVAL_REQUIRED'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : isClashing
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-amber-100 text-amber-800'
                   }`}>
-                  {isClashing ? 'WILL BE IN_PROGRESS' : 'DRAFT (Unreserved)'}
+                  {selectedResource.bookingRule?.bookingPolicy === 'APPROVAL_REQUIRED'
+                    ? 'PENDING_APPROVAL'
+                    : isClashing
+                      ? 'WILL BE IN_PROGRESS'
+                      : 'DRAFT (Unreserved)'}
                 </span>
               </div>
               <div className="flex justify-between border-t border-slate-200 pt-3">
@@ -631,9 +646,11 @@ export function MemberDashboard() {
             </div>
 
             <p className="mt-3 text-xs text-slate-500">
-              {isClashing
-                ? 'Because this time window overlaps with an already booked slot, confirming will submit your request with status IN_PROGRESS.'
-                : 'Slots are not held and credits are not deducted while in draft. On confirmation, the slot will be locked and credits will be debited.'}
+              {selectedResource.bookingRule?.bookingPolicy === 'APPROVAL_REQUIRED'
+                ? 'This resource requires approval. Your request will be submitted and marked as pending approval.'
+                : isClashing
+                  ? 'Because this time window overlaps with an already booked slot, confirming will submit your request with status IN_PROGRESS.'
+                  : 'Slots are not held and credits are not deducted while in draft. On confirmation, the slot will be locked and credits will be debited.'}
             </p>
 
             <div className="mt-6 flex justify-end gap-3">
