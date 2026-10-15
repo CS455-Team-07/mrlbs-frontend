@@ -106,4 +106,38 @@ describe('MemberHistory', () => {
       expect(screen.getByText(/failed to load booking history/i)).toBeInTheDocument()
     })
   })
+
+  it('displays REJECTED status badge and saved rejection reason', async () => {
+    const mockBookings = [
+      {
+        id: 'b-rej',
+        resourceId: 'res-rej',
+        resourceName: 'Supercomputer Cluster',
+        startTime: '2030-01-01T14:00:00',
+        endTime: '2030-01-01T16:00:00',
+        status: 'REJECTED',
+        creditCost: 0,
+        memberId: 'member-1',
+        rejectionReason: 'Maintenance window scheduled; please choose another slot.',
+      },
+    ]
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockBookings,
+    } as Response)
+
+    render(
+      <MemoryRouter>
+        <MemberHistory />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Supercomputer Cluster')).toBeInTheDocument()
+      expect(screen.getByText('REJECTED')).toBeInTheDocument()
+      expect(screen.getByText(/Reason: Maintenance window scheduled/)).toBeInTheDocument()
+    })
+  })
 })
+

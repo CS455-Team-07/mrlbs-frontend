@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -6,6 +7,7 @@ import {
 } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { apiClientConfig, csrfFetch } from '../services/apiClient'
 
 export function ProfilePage() {
   const { user, updateProfile } = useAuth()
@@ -23,6 +25,32 @@ export function ProfilePage() {
   )
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+
+  const [currentBalance, setCurrentBalance] = useState<number | null>(null)
+  const [loadingCredits, setLoadingCredits] = useState(false)
+  const STARTING_CREDITS = 1000
+
+  useEffect(() => {
+    if (user?.role === 'member' && user?.email) {
+      setLoadingCredits(true)
+      csrfFetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, name: user.name }),
+        credentials: 'include',
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.credits != null) {
+            setCurrentBalance(Number(data.credits))
+          }
+        })
+        .catch((err) => console.error('Failed to load credit balance', err))
+        .finally(() => setLoadingCredits(false))
+    }
+  }, [user?.email, user?.role, user?.name])
+
+  const usedCredits = currentBalance != null ? Math.max(0, STARTING_CREDITS - currentBalance) : null
 
   if (!user) {
     return (
@@ -239,6 +267,58 @@ export function ProfilePage() {
         </div>
 
       </div>
+
+      {/* Member Credits Overview */}
+      {user.role === 'member' && (
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 space-y-5">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">Credits Overview</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Track your initial allotment, debits, and remaining balance</p>
+            </div>
+            <span className="w-fit rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700">
+              Active Member Account
+            </span>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            {/* Initial credits */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5 transition hover:border-slate-300">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Initial Credits
+              </p>
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {STARTING_CREDITS.toLocaleString()} <span className="text-xs font-normal text-slate-500">Credits</span>
+              </p>
+              <p className="mt-1 text-xs text-slate-500">Allotted upon account registration</p>
+            </div>
+
+            {/* Used credits */}
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-5 transition hover:border-amber-300">
+              <p className="text-xs font-semibold uppercase tracking-wider text-amber-800">
+                Used Credits
+              </p>
+              <p className="mt-2 text-2xl font-bold text-amber-900">
+                {loadingCredits ? '…' : (usedCredits ?? 0).toLocaleString()}{' '}
+                <span className="text-xs font-normal text-amber-700">Credits</span>
+              </p>
+              <p className="mt-1 text-xs text-amber-700/80">Debited for confirmed bookings & waitlists</p>
+            </div>
+
+            {/* Current balance */}
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 transition hover:border-emerald-300">
+              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
+                Current Balance
+              </p>
+              <p className="mt-2 text-2xl font-bold text-emerald-700">
+                {loadingCredits ? '…' : (currentBalance ?? STARTING_CREDITS).toLocaleString()}{' '}
+                <span className="text-xs font-normal text-emerald-600">Credits</span>
+              </p>
+              <p className="mt-1 text-xs text-emerald-700/80">Available to reserve upcoming slots</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Profile form */}
       <form
