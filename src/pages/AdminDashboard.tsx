@@ -41,8 +41,23 @@ type ApprovalRequest = {
   resourceType: string
   startTime: string
   endTime: string
+  createdAt?: string
   status: string
   aiReview?: AiReviewSummary | null
+}
+
+type ValidationFailureModalState = {
+  bookingId: string
+  reason: string
+  resourceName: string
+  memberEmail: string
+}
+
+type RejectionModalState = {
+  bookingId: string
+  resourceName: string
+  memberEmail: string
+  reason: string
 }
 const makeDraft = (resource: Resource): ResourceDraft => ({
   name: resource.name ?? '',
@@ -77,6 +92,10 @@ export function AdminDashboard() {
   const [approvalError, setApprovalError] = useState('')
   const [processingApprovalIds, setProcessingApprovalIds] = useState<Set<string>>(new Set())
   const [expandedReviewIds, setExpandedReviewIds] = useState<Set<string>>(new Set())
+  const [validationFailureModal, setValidationFailureModal] = useState<ValidationFailureModalState | null>(null)
+  const [rejectionModal, setRejectionModal] = useState<RejectionModalState | null>(null)
+  const [rejectionSubmitting, setRejectionSubmitting] = useState(false)
+  const [rejectionModalError, setRejectionModalError] = useState('')
 
   const toggleReviewExpanded = (id: string) => {
     setExpandedReviewIds((prev) => {
@@ -143,9 +162,19 @@ export function AdminDashboard() {
         throw new Error('Failed to load approval requests')
       }
       const data = (await response.json()) as ApprovalRequest[]
-      const sorted = [...data].sort(
-        (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
-      )
+      const sorted = [...data].sort((a, b) => {
+        const dayA = new Date(a.startTime).toISOString().slice(0, 10)
+        const dayB = new Date(b.startTime).toISOString().slice(0, 10)
+        const dayDiff = dayA.localeCompare(dayB)
+        if (dayDiff !== 0) return dayDiff
+
+        const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        const createdDiff = createdA - createdB
+        if (createdDiff !== 0) return createdDiff
+
+        return new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+      })
       setApprovalRequests(sorted)
       setApprovalError('')
     } catch (error) {
@@ -230,27 +259,89 @@ export function AdminDashboard() {
     }
   }
 
-  const handleApprovalDecision = async (bookingId: string, approved: boolean) => {
+  const handleApprove = async (request: ApprovalRequest) => {
     try {
-      setProcessingApprovalIds((current) => new Set([...current, bookingId]))
-      const response = await csrfFetch(`${API_BASE_URL}/bookings/${bookingId}/${approved ? 'approve' : 'reject'}`, {
+      setProcessingApprovalIds((current) => new Set([...current, request.id]))
+      setApprovalError('')
+      const response = await csrfFetch(`${API_BASE_URL}/bookings/${request.id}/approve`, {
         method: 'POST',
       })
 
       if (!response.ok) {
-        throw new Error(approved ? 'Unable to approve booking' : 'Unable to reject booking')
+        let failureReason = 'The booking request could not be approved due to validation failure.'
+        try {
+          const problem = await response.json()
+          failureReason = problem.detail || problem.message || failureReason
+        } catch {
+          // fallback
+        }
+        setValidationFailureModal({
+          bookingId: request.id,
+          reason: failureReason,
+          resourceName: request.resourceName,
+          memberEmail: request.memberEmail,
+        })
+        return
       }
 
       await fetchApprovalRequests()
     } catch (error) {
       console.error(error)
-      setApprovalError('Could not update the booking request. Please try again.')
+      setApprovalError('Could not process approval. Please try again.')
     } finally {
       setProcessingApprovalIds((current) => {
         const next = new Set(current)
-        next.delete(bookingId)
+        next.delete(request.id)
         return next
       })
+    }
+  }
+
+  const handleOpenReject = (request: ApprovalRequest, initialReason = '') => {
+    setRejectionModal({
+      bookingId: request.id,
+      resourceName: request.resourceName,
+      memberEmail: request.memberEmail,
+      reason: initialReason,
+    })
+    setRejectionModalError('')
+  }
+
+  const handleConfirmReject = async () => {
+    if (!rejectionModal) return
+    const trimmedReason = rejectionModal.reason.trim()
+    if (!trimmedReason) {
+      setRejectionModalError('A rejection reason is required.')
+      return
+    }
+
+    try {
+      setRejectionSubmitting(true)
+      setRejectionModalError('')
+      const response = await csrfFetch(`${API_BASE_URL}/bookings/${rejectionModal.bookingId}/reject`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason: trimmedReason }),
+      })
+
+      if (!response.ok) {
+        let msg = 'Unable to reject booking request.'
+        try {
+          const problem = await response.json()
+          msg = problem.detail || problem.message || msg
+        } catch {}
+        throw new Error(msg)
+      }
+
+      setRejectionModal(null)
+      await fetchApprovalRequests()
+    } catch (error) {
+      console.error(error)
+      setRejectionModalError(error instanceof Error ? error.message : 'Could not reject the booking request.')
+    } finally {
+      setRejectionSubmitting(false)
     }
   }
 
@@ -354,12 +445,17 @@ export function AdminDashboard() {
                             <p className="text-sm font-semibold text-slate-900">{request.resourceName}</p>
                             <p className="text-xs uppercase tracking-wide text-slate-500">{request.resourceType}</p>
                           </div>
-                          <div className="text-sm text-slate-600">
+                          <div className="text-sm text-slate-600 sm:text-right">
                             <div>{request.memberEmail}</div>
                             <div>
                               {new Date(request.startTime).toLocaleString([], { timeStyle: 'short' })} - {' '}
                               {new Date(request.endTime).toLocaleString([], { timeStyle: 'short' })}
                             </div>
+                            {request.createdAt && (
+                              <div className="text-xs text-slate-400 mt-0.5">
+                                Requested: {new Date(request.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -458,15 +554,15 @@ export function AdminDashboard() {
                           <div className="flex shrink-0 justify-end gap-2 self-end sm:self-center">
                             <button
                               type="button"
-                              onClick={() => void handleApprovalDecision(request.id, false)}
+                              onClick={() => handleOpenReject(request)}
                               disabled={processingApprovalIds.has(request.id)}
                               className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60 cursor-pointer"
                             >
-                              {processingApprovalIds.has(request.id) ? 'Updating...' : 'Reject'}
+                              Reject
                             </button>
                             <button
                               type="button"
-                              onClick={() => void handleApprovalDecision(request.id, true)}
+                              onClick={() => void handleApprove(request)}
                               disabled={processingApprovalIds.has(request.id)}
                               className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
                             >
@@ -761,6 +857,141 @@ export function AdminDashboard() {
         )}
       </div>
       <ResourceOnboardingForm onCreated={() => { void fetchResources() }} />
+
+      {/* ── Validation Failure Modal ─────────────────────────────── */}
+      {validationFailureModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={() => setValidationFailureModal(null)}
+        >
+          <div
+            className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 place-items-center rounded-xl bg-amber-100 text-amber-700 text-xl font-bold">
+                ⚠️
+              </span>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Approval Validation Failure</h3>
+                <p className="text-xs text-slate-500">
+                  {validationFailureModal.resourceName} · {validationFailureModal.memberEmail}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold mb-1">Reason for failure:</p>
+              <p className="leading-relaxed text-amber-800">{validationFailureModal.reason}</p>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              This request cannot be approved at this time. You can cancel to leave the booking in pending approval, or reject the booking with a reason.
+            </p>
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setValidationFailureModal(null)}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const failure = validationFailureModal
+                  setValidationFailureModal(null)
+                  setRejectionModal({
+                    bookingId: failure.bookingId,
+                    resourceName: failure.resourceName,
+                    memberEmail: failure.memberEmail,
+                    reason: failure.reason,
+                  })
+                  setRejectionModalError('')
+                }}
+                className="rounded-lg border border-rose-300 bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 cursor-pointer"
+              >
+                Reject with Reason
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Rejection Modal ────────────────────────────────────────── */}
+      {rejectionModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={() => {
+            if (!rejectionSubmitting) setRejectionModal(null)
+          }}
+        >
+          <div
+            className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 place-items-center rounded-xl bg-rose-100 text-rose-700 text-xl font-bold">
+                🛑
+              </span>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Reject Booking Request</h3>
+                <p className="text-xs text-slate-500">
+                  {rejectionModal.resourceName} · {rejectionModal.memberEmail}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Please provide a reason for rejecting this booking. The reason will be persisted and sent to the member via in-app notification.
+            </p>
+
+            <label className="block space-y-1.5 text-sm font-semibold text-slate-700">
+              Rejection Reason <span className="text-rose-500">*</span>
+              <textarea
+                rows={4}
+                className="w-full rounded-xl border border-slate-300 p-3 text-sm text-slate-900 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                placeholder="Enter the specific reason for rejecting this request..."
+                value={rejectionModal.reason}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setRejectionModal((prev) => (prev ? { ...prev, reason: val } : null))
+                  if (rejectionModalError && val.trim()) {
+                    setRejectionModalError('')
+                  }
+                }}
+                disabled={rejectionSubmitting}
+              />
+            </label>
+
+            {rejectionModalError && (
+              <p className="rounded-lg bg-rose-50 p-2.5 text-xs font-semibold text-rose-700">
+                {rejectionModalError}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setRejectionModal(null)}
+                disabled={rejectionSubmitting}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmReject()}
+                disabled={rejectionSubmitting || !rejectionModal.reason.trim()}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60 cursor-pointer"
+              >
+                {rejectionSubmitting ? 'Rejecting...' : 'Confirm Rejection'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

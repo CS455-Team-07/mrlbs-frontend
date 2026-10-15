@@ -13,6 +13,7 @@ interface MemberBooking {
   creditCost: number | null
   clashes?: boolean | null
   memberId?: string
+  rejectionReason?: string | null
 }
 
 export function MemberHistory() {
@@ -134,6 +135,8 @@ export function MemberHistory() {
         return 'border border-amber-200 bg-amber-50 text-amber-700'
       case 'CANCELLED':
         return 'border border-slate-200 bg-slate-100 text-slate-600'
+      case 'REJECTED':
+        return 'border border-rose-200 bg-rose-50 text-rose-700'
       case 'PENDING':
       case 'PENDING_APPROVAL':
         return 'border border-indigo-200 bg-indigo-50 text-indigo-700'
@@ -201,13 +204,20 @@ export function MemberHistory() {
                   {b.creditCost != null ? `${b.creditCost} cr` : '—'}
                 </td>
                 <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${getStatusBadgeClass(
-                      b.status,
-                    )}`}
-                  >
-                    {b.status}
-                  </span>
+                  <div className="flex flex-col items-start gap-1">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${getStatusBadgeClass(
+                        b.status,
+                      )}`}
+                    >
+                      {b.status}
+                    </span>
+                    {b.rejectionReason && (
+                      <span className="text-[11px] text-rose-600 max-w-xs break-words" title={b.rejectionReason}>
+                        Reason: {b.rejectionReason}
+                      </span>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

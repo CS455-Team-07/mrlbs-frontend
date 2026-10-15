@@ -13,10 +13,15 @@ interface ResourceOption {
   available: boolean
   bookingRule?: {
     bookingPolicy?: string
+    bufferTimeMinutes?: number | null
   }
 }
 interface TimeSlot { startTime: string; endTime: string }
-interface Availability { bookedSlots: TimeSlot[]; availableSlots: TimeSlot[] }
+interface Availability {
+  bookedSlots: TimeSlot[]
+  availableSlots: TimeSlot[]
+  pendingApprovalSlots?: TimeSlot[]
+}
 interface BookingResult {
   id: string
   creditCost: number
@@ -45,6 +50,7 @@ interface MemberBooking extends BookingResult {
   resourceId: string
   resourceName?: string
   memberId?: string
+  rejectionReason?: string | null
 }
 interface WaitlistOfferItem {
   id: string
@@ -148,6 +154,7 @@ export function MemberDashboard() {
       location: rec.location,
       capacity: rec.capacity,
       available: rec.available,
+      bookingRule: rec.bookingPolicy ? { bookingPolicy: rec.bookingPolicy } : undefined,
     }
 
     setResources((prev) => {
@@ -304,6 +311,19 @@ export function MemberDashboard() {
           current.map((r) => (r.id === resource.id ? { ...r, available: avail.availableSlots.length > 0 } : r))
         )
       }
+      if (!resource.bookingRule) {
+        try {
+          const resDetail = await fetch(`${apiClientConfig.baseUrl}/resources/${resource.id}`, { credentials: 'include' })
+          if (resDetail.ok) {
+            const fullRes = await resDetail.json()
+            if (fullRes?.bookingRule) {
+              setSelectedResource((curr) => (curr?.id === resource.id ? { ...curr, bookingRule: fullRes.bookingRule } : curr))
+            }
+          }
+        } catch {
+          // ignore fallback error
+        }
+      }
     } catch (availabilityError) {
       setError(availabilityError instanceof Error ? availabilityError.message : 'Availability could not be loaded.')
     }
@@ -416,7 +436,13 @@ export function MemberDashboard() {
         setMemberCreditBalance(Number(confirmed.memberBalance))
       }
       setBooking(confirmed)
-      if (confirmed.waitlist || confirmed.status === 'IN_PROGRESS') {
+      if (confirmed.status === 'PENDING_APPROVAL') {
+        if (confirmed.clashes && confirmed.queuePosition) {
+          setBookingSuccessNotice(`Booking submitted successfully! Waiting for approval. Expected queue position upon approval: #${confirmed.queuePosition}.`)
+        } else {
+          setBookingSuccessNotice('Booking submitted successfully! Waiting for approval.')
+        }
+      } else if (confirmed.waitlist || confirmed.status === 'IN_PROGRESS') {
         setBookingSuccessNotice(`Booking request submitted successfully. Queue position: ${confirmed.queuePosition || 1}`)
       } else {
         setBookingSuccessNotice(`Booking confirmed! Cost: ${confirmed.creditCost} credits.`)
@@ -553,7 +579,12 @@ export function MemberDashboard() {
         }
         throw new Error(problem?.detail || 'Failed to confirm booking.')
       }
-      setOfferSuccessNotice('Booking confirmed successfully! Your credits have been deducted.')
+      const data = (await res.json().catch(() => null)) as BookingResult | null
+      if (data?.status === 'PENDING_APPROVAL') {
+        setOfferSuccessNotice('Booking submitted successfully! Waiting for approval.')
+      } else {
+        setOfferSuccessNotice('Booking confirmed successfully! Your credits have been deducted.')
+      }
       void loadOffersAndNotifications()
       void loadBookings()
       void loadWaitlists()
@@ -783,6 +814,7 @@ export function MemberDashboard() {
                 <p className="text-sm text-slate-600">
                   {resource.type} · {resource.location}
                   {resource.capacity != null && ` · Capacity: ${resource.capacity}`}
+                  {` · Buffer: ${resource.bookingRule?.bufferTimeMinutes ?? 15} mins`}
                 </p>
               </div>
               {/* Status badge */}
@@ -842,6 +874,27 @@ export function MemberDashboard() {
                         </ul>
                       </>
                     )}
+
+                    {/* Pending admin approval slots */}
+                    {selectedResource?.bookingRule?.bookingPolicy === 'APPROVAL_REQUIRED' &&
+                      availability.pendingApprovalSlots &&
+                      availability.pendingApprovalSlots.length > 0 && (
+                        <>
+                          <div className="mb-2 flex items-center gap-2">
+                            <h4 className="text-sm font-semibold text-amber-800">Pending admin approval</h4>
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
+                              Awaiting Review
+                            </span>
+                          </div>
+                          <ul className="mb-5 list-inside list-disc text-sm text-amber-700">
+                            {availability.pendingApprovalSlots.map((slot) => (
+                              <li key={`pending-${slot.startTime}-${slot.endTime}`}>
+                                {formatSlot(slot)} <span className="text-xs text-amber-600">(decision pending)</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                    )}
                   </>
                 )}
 
@@ -866,10 +919,12 @@ export function MemberDashboard() {
                       role="status"
                     >
                       {bookingSuccessNotice || (booking.status === 'PENDING_APPROVAL'
-                        ? 'Booking submitted successfully! Waiting for approval.'
-                        : booking.status === 'IN_PROGRESS'
+                        ? (booking.clashes && booking.queuePosition
+                          ? `Booking submitted successfully! Waiting for approval. Expected queue position upon approval: #${booking.queuePosition}.`
+                          : 'Booking submitted successfully! Waiting for approval.')
+                        : (booking.waitlist || booking.status === 'IN_PROGRESS'
                           ? `Booking request submitted successfully. Queue position: ${booking.queuePosition || 1}`
-                          : `Booking confirmed! Cost: ${booking.creditCost} credits.`)}
+                          : `Booking confirmed! Cost: ${booking.creditCost} credits.`))}
                     </p>
                   )}
                   <div className="flex justify-end gap-3">
@@ -915,11 +970,24 @@ export function MemberDashboard() {
               </h3>
             </div>
 
+            {selectedResource.bookingRule?.bookingPolicy === 'APPROVAL_REQUIRED' && (
+              <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 space-y-1.5">
+                <p className="font-semibold flex items-center gap-1.5 text-amber-900">
+                  <span>⚠️</span> Consideration for Pending Admin Approval Slots
+                </p>
+                <p className="text-amber-900 leading-relaxed">
+                  Please consider the pending admin approval slots and select accordingly without slot conflict and buffer time ({selectedResource.bookingRule?.bufferTimeMinutes ?? 15} mins) violation. If you still want to select this slot, you can proceed and confirm your booking request below.
+                </p>
+              </div>
+            )}
+
             {isClashing && (
               <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 space-y-1">
                 <p className="font-semibold">This slot is currently unavailable.</p>
                 <p className="text-amber-900">
-                  The requested time slot is occupied by an existing booking. Would you like to join the waitlist for this slot?
+                  {selectedResource.bookingRule?.bookingPolicy === 'APPROVAL_REQUIRED'
+                    ? 'The requested time slot is occupied by an existing booking. This resource requires administrator approval. If approved, you will join the waitlist at the expected queue position.'
+                    : 'The requested time slot is occupied by an existing booking. Would you like to join the waitlist for this slot?'}
                 </p>
               </div>
             )}
@@ -954,17 +1022,26 @@ export function MemberDashboard() {
               </div>
               {isClashing && (
                 <div className="flex justify-between border-t border-slate-200 pt-3">
-                  <span className="text-slate-500">Queue Position</span>
+                  <span className="text-slate-500">
+                    {selectedResource.bookingRule?.bookingPolicy === 'APPROVAL_REQUIRED' ? 'Expected Queue Position' : 'Queue Position'}
+                  </span>
                   <span className="font-bold text-amber-900">
                     #{draftBooking.queuePosition || 1} in queue
                   </span>
                 </div>
               )}
-              <div className="flex justify-between border-t border-slate-200 pt-3">
-                <span className="text-slate-500">Required Credits</span>
-                <span className="text-base font-bold text-blue-700">
-                  {draftBooking.creditCost} Credits
-                </span>
+              <div className="flex flex-col gap-1 border-t border-slate-200 pt-3">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-slate-500">Required Credits</span>
+                  <span className="text-base font-bold text-blue-700">
+                    {draftBooking.creditCost} Credits
+                  </span>
+                </div>
+                {selectedResource.bookingRule?.bookingPolicy === 'APPROVAL_REQUIRED' && (
+                  <span className="text-xs text-slate-500 text-right">
+                    (the required credits may be more than this based on the contention at the time of admin approval)
+                  </span>
+                )}
               </div>
               <div className="flex justify-between border-t border-slate-200 pt-3">
                 <span className="text-slate-500">Current Member Balance</span>
@@ -976,7 +1053,9 @@ export function MemberDashboard() {
 
             <p className="mt-3 text-xs text-slate-500">
               {selectedResource.bookingRule?.bookingPolicy === 'APPROVAL_REQUIRED'
-                ? 'This resource requires approval. Your request will be submitted and marked as pending approval.'
+                ? (isClashing
+                  ? `This resource requires approval and clashes with an existing booking. Your request will be submitted as PENDING_APPROVAL with expected queue position #${draftBooking.queuePosition || 1} upon approval.`
+                  : 'This resource requires approval. Your request will be submitted and marked as pending approval.')
                 : isClashing
                   ? `${draftBooking.creditCost} credits will be deducted upon joining the waitlist (IN_PROGRESS). If cancelled, your credits will be fully refunded.`
                   : 'Slots are not held and credits are not deducted while in draft. On confirmation, the slot will be locked and credits will be debited.'}
@@ -1081,7 +1160,9 @@ export function MemberDashboard() {
                   ? 'bg-emerald-100 text-emerald-800'
                   : selectedBookingDetails.status === 'DRAFT'
                     ? 'bg-amber-100 text-amber-800'
-                    : 'bg-slate-100 text-slate-800'
+                    : selectedBookingDetails.status === 'REJECTED'
+                      ? 'bg-rose-100 text-rose-800'
+                      : 'bg-slate-100 text-slate-800'
                   }`}>
                   {selectedBookingDetails.status}
                 </span>
@@ -1090,6 +1171,12 @@ export function MemberDashboard() {
                 <span className="text-slate-500">Credit Cost</span>
                 <span className="font-bold text-blue-700">{selectedBookingDetails.creditCost} Credits</span>
               </div>
+              {selectedBookingDetails.rejectionReason && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-900 space-y-1">
+                  <span className="font-bold block">Rejection Reason:</span>
+                  <p className="leading-relaxed">{selectedBookingDetails.rejectionReason}</p>
+                </div>
+              )}
               <div className="flex justify-between text-xs text-slate-500">
                 <span>Member ID</span>
                 <span className="font-mono">{selectedBookingDetails.memberId || 'N/A'}</span>
@@ -1193,13 +1280,12 @@ export function MemberDashboard() {
                       <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-semibold text-blue-700 border border-blue-200">
                         💰 Preserved Cost: {offer.creditCost} Credits (Locked)
                       </span>
-                      <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 font-bold border ${
-                        isExpired
+                      <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 font-bold border ${isExpired
                           ? 'bg-rose-50 text-rose-700 border-rose-200'
                           : secondsLeft < 60
                             ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
                             : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      }`}>
+                        }`}>
                         ⏳ {isExpired ? 'Offer Expired' : `Expires in: ${formatCountdown(secondsLeft)}`}
                       </span>
                       <span className="text-slate-400">
@@ -1320,15 +1406,14 @@ export function MemberDashboard() {
                         </span>
                       )}
                       <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${
-                          isActive
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${isActive
                             ? 'bg-amber-100 text-amber-800'
                             : isAllocated
                               ? 'bg-emerald-100 text-emerald-800'
                               : isLeft
                                 ? 'border border-slate-200 bg-slate-100 text-slate-600'
                                 : 'bg-slate-200 text-slate-700'
-                        }`}
+                          }`}
                       >
                         {isActive ? 'WAITING' : isAllocated ? 'ALLOCATED' : entry.status}
                       </span>
@@ -1394,6 +1479,14 @@ export function MemberDashboard() {
                         <p className="mt-1 text-sm text-slate-600">
                           ⏱ {memberBooking.startTime.replace('T', ' ').slice(11, 16)} - {memberBooking.endTime.replace('T', ' ').slice(11, 16)} · {memberBooking.creditCost} Credits
                         </p>
+                        {memberBooking.rejectionReason && (
+                          <p className="mt-1 text-xs text-rose-600 font-medium">
+                            Rejection reason: {memberBooking.rejectionReason}
+                          </p>
+                        )}
+                        <span className="sr-only">
+                          {memberBooking.startTime.slice(0, 10)} {memberBooking.startTime.replace('T', ' ').slice(11, 16)} to {memberBooking.endTime.slice(0, 10)} {memberBooking.endTime.replace('T', ' ').slice(11, 16)} {memberBooking.status} · {memberBooking.creditCost} credits
+                        </span>
                       </div>
 
                       {/* Right side: Show Details link, Status badge & Actions */}
@@ -1427,6 +1520,7 @@ export function MemberDashboard() {
                               disabled={loading}
                               onClick={() => void cancelBooking(memberBooking)}
                               type="button"
+                              aria-label="Cancel booking"
                             >
                               Cancel
                             </button>
@@ -1436,11 +1530,13 @@ export function MemberDashboard() {
                               ? 'bg-emerald-100 text-emerald-800'
                               : memberBooking.status === 'CANCELLED'
                                 ? 'border border-red-200 bg-red-50 text-red-700'
-                                : memberBooking.status === 'PENDING' || memberBooking.status === 'PENDING_APPROVAL'
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : memberBooking.status === 'DRAFT'
+                                : memberBooking.status === 'REJECTED'
+                                  ? 'border border-rose-200 bg-rose-50 text-rose-700'
+                                  : memberBooking.status === 'PENDING' || memberBooking.status === 'PENDING_APPROVAL'
                                     ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-slate-200 text-slate-700'
+                                    : memberBooking.status === 'DRAFT'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-slate-200 text-slate-700'
                               }`}
                           >
                             {memberBooking.status}
@@ -1516,11 +1612,10 @@ export function MemberDashboard() {
                 notifications.map((notif) => (
                   <article
                     key={notif.id}
-                    className={`rounded-xl border p-4 transition ${
-                      notif.isRead
+                    className={`rounded-xl border p-4 transition ${notif.isRead
                         ? 'border-slate-200 bg-slate-50/50 text-slate-700'
                         : 'border-blue-200 bg-blue-50/60 shadow-sm text-slate-900'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <h4 className="text-sm font-bold">{notif.title}</h4>
