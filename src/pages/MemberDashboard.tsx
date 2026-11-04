@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, type FormEvent } from 'react'
+import { useState, useEffect, useContext, useRef, useCallback, type FormEvent } from 'react'
 import { apiClientConfig, csrfFetch, getCsrfToken } from '../services/apiClient'
 import { AuthContext } from '../context/authContextInstance'
 import { AiAssistantDrawer } from '../components/AiAssistantDrawer'
@@ -254,23 +254,37 @@ export function MemberDashboard() {
     return problem.detail || 'The booking request could not be completed.'
   }
 
-  async function searchResources(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isInitialMount = useRef(true)
+
+  const performSearch = useCallback(async (
+    targetType = type,
+    targetDate = date,
+    targetStart = searchStartTime,
+    targetEnd = searchEndTime,
+    targetCapacity = capacity
+  ) => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current)
+      searchDebounceRef.current = null
+    }
     setLoading(true)
     setError('')
     setSelectedResource(null)
     setAvailability(null)
     setBooking(null)
     const params = new URLSearchParams()
-    if (type.trim()) params.set('type', type.trim())
-    if (date) params.set('date', date)
-    if (date && searchStartTime) {
-      params.set('startTime', `${date}T${searchStartTime}`)
+    if (targetType.trim()) params.set('type', targetType.trim())
+    if (targetDate) params.set('date', targetDate)
+
+    const effectiveDate = targetDate || ((targetStart || targetEnd) ? new Date().toISOString().split('T')[0] : '')
+    if (effectiveDate && targetStart) {
+      params.set('startTime', `${effectiveDate}T${targetStart}`)
     }
-    if (date && searchEndTime) {
-      params.set('endTime', `${date}T${searchEndTime}`)
+    if (effectiveDate && targetEnd) {
+      params.set('endTime', `${effectiveDate}T${targetEnd}`)
     }
-    if (capacity) params.set('capacity', capacity)
+    if (targetCapacity) params.set('capacity', targetCapacity)
     try {
       const response = await fetch(`${apiClientConfig.baseUrl}/resources/search?${params}`, { credentials: 'include' })
       if (!response.ok) throw new Error('Resources could not be loaded.')
@@ -279,7 +293,39 @@ export function MemberDashboard() {
     } catch (searchError) {
       setError(searchError instanceof Error ? searchError.message : 'Resources could not be loaded.')
     } finally { setLoading(false) }
+  }, [type, date, searchStartTime, searchEndTime, capacity])
+
+  async function searchResources(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current)
+      searchDebounceRef.current = null
+    }
+    await performSearch()
   }
+
+  // Auto-search within 1 second whenever date or timings are entered
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+
+    if (date || searchStartTime || searchEndTime) {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current)
+      }
+      searchDebounceRef.current = setTimeout(() => {
+        void performSearch(type, date, searchStartTime, searchEndTime, capacity)
+      }, 350)
+    }
+
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current)
+      }
+    }
+  }, [date, searchStartTime, searchEndTime, type, capacity, performSearch])
 
   async function chooseResource(
     resource: ResourceOption,
@@ -293,7 +339,7 @@ export function MemberDashboard() {
       setBooking(null)
       return
     }
-    const effectiveDate = targetDate || date
+    const effectiveDate = targetDate || date || new Date().toISOString().split('T')[0]
     const effectiveStart = targetStart !== undefined ? targetStart : (searchStartTime || '')
     const effectiveEnd = targetEnd !== undefined ? targetEnd : (searchEndTime || '')
     setSelectedResource(resource)
@@ -777,7 +823,7 @@ export function MemberDashboard() {
           <input className={inputClassName} onChange={(event) => setType(event.target.value)} placeholder="e.g. Lecture Hall" value={type} />
         </label>
         <label className="space-y-2 text-sm font-semibold text-slate-800">Date
-          <input className={inputClassName} onChange={(event) => setDate(event.target.value)} required type="date" value={date} />
+          <input className={inputClassName} onChange={(event) => setDate(event.target.value)} type="date" value={date} />
         </label>
         <label className="space-y-2 text-sm font-semibold text-slate-800">Start time (optional)
           <input className={inputClassName} onChange={(event) => setSearchStartTime(event.target.value)} type="time" value={searchStartTime} />
