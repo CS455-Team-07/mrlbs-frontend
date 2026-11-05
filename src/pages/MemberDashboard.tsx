@@ -78,6 +78,34 @@ interface InAppNotificationItem {
 }
 interface ApiProblem { reasonCode?: string; detail?: string }
 
+function getTodayDateString(): string {
+  const d = new Date()
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return year + "-" + month + "-" + day;
+}
+
+function getNextHourTimeString(): string {
+  const d = new Date()
+  const nextHour = d.getHours() + 1
+  if (nextHour >= 24) {
+    return '23:59'
+  }
+  return String(nextHour).padStart(2, '0') + ":00";
+}
+
+function isCancellationWindowOpen(booking: MemberBooking): boolean {
+  if (booking.status !== 'CONFIRMED') {
+    return true
+  }
+  const startMs = new Date(booking.startTime).getTime()
+  if (isNaN(startMs)) return true
+  const twoHoursMs = 2 * 60 * 60 * 1000
+  return (startMs - Date.now()) > twoHoursMs
+}
+
+
 export function MemberDashboard() {
   const auth = useContext(AuthContext)
   const user = auth?.user
@@ -86,6 +114,9 @@ export function MemberDashboard() {
   const [searchStartTime, setSearchStartTime] = useState('')
   const [searchEndTime, setSearchEndTime] = useState('')
   const [capacity, setCapacity] = useState('')
+  const todayDateString = getTodayDateString()
+  const isToday = date === todayDateString
+  const nextHourTimeString = getNextHourTimeString()
   const [resources, setResources] = useState<ResourceOption[]>([])
   const [selectedResource, setSelectedResource] = useState<ResourceOption | null>(null)
   const [availability, setAvailability] = useState<Availability | null>(null)
@@ -255,6 +286,7 @@ export function MemberDashboard() {
   }
 
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchCacheRef = useRef<Map<string, { data: ResourceOption[]; timestamp: number }>>(new Map())
   const isInitialMount = useRef(true)
 
   const performSearch = useCallback(async (
@@ -268,11 +300,6 @@ export function MemberDashboard() {
       clearTimeout(searchDebounceRef.current)
       searchDebounceRef.current = null
     }
-    setLoading(true)
-    setError('')
-    setSelectedResource(null)
-    setAvailability(null)
-    setBooking(null)
     const params = new URLSearchParams()
     if (targetType.trim()) params.set('type', targetType.trim())
     if (targetDate) params.set('date', targetDate)
@@ -285,10 +312,27 @@ export function MemberDashboard() {
       params.set('endTime', `${effectiveDate}T${targetEnd}`)
     }
     if (targetCapacity) params.set('capacity', targetCapacity)
+
+    const cacheKey = params.toString()
+    const cached = searchCacheRef.current.get(cacheKey)
+    const isFresh = cached && (Date.now() - cached.timestamp < 30000)
+
+    if (isFresh) {
+      setResources(cached.data)
+      setError('')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setSelectedResource(null)
+    setAvailability(null)
+    setBooking(null)
     try {
       const response = await fetch(`${apiClientConfig.baseUrl}/resources/search?${params}`, { credentials: 'include' })
       if (!response.ok) throw new Error('Resources could not be loaded.')
       const results = (await response.json()) as ResourceOption[]
+      searchCacheRef.current.set(cacheKey, { data: results, timestamp: Date.now() })
       setResources(results)
     } catch (searchError) {
       setError(searchError instanceof Error ? searchError.message : 'Resources could not be loaded.')
@@ -317,7 +361,7 @@ export function MemberDashboard() {
       }
       searchDebounceRef.current = setTimeout(() => {
         void performSearch(type, date, searchStartTime, searchEndTime, capacity)
-      }, 350)
+      }, 150)
     }
 
     return () => {
@@ -339,7 +383,7 @@ export function MemberDashboard() {
       setBooking(null)
       return
     }
-    const effectiveDate = targetDate || date || new Date().toISOString().split('T')[0]
+    const effectiveDate = targetDate || date || todayDateString
     const effectiveStart = targetStart !== undefined ? targetStart : (searchStartTime || '')
     const effectiveEnd = targetEnd !== undefined ? targetEnd : (searchEndTime || '')
     setSelectedResource(resource)
@@ -378,6 +422,13 @@ export function MemberDashboard() {
   async function handleSubmitClick(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedResource) return
+    if (date === todayDateString) {
+      const nextHour = getNextHourTimeString()
+      if (startTime && startTime < nextHour) {
+        setError("For today's bookings, start time must begin from the next hour (" + nextHour + ") onward.")
+        return
+      }
+    }
     setLoading(true)
     setError('')
     try {
@@ -730,6 +781,10 @@ export function MemberDashboard() {
   }
 
   async function cancelBooking(memberBooking: MemberBooking) {
+    if (memberBooking.status === 'CONFIRMED' && !isCancellationWindowOpen(memberBooking)) {
+      setError('Confirmed bookings cannot be cancelled within 2 hours of the scheduled start time.')
+      return
+    }
     setLoading(true)
     setError('')
     try {
@@ -823,10 +878,37 @@ export function MemberDashboard() {
           <input className={inputClassName} onChange={(event) => setType(event.target.value)} placeholder="e.g. Lecture Hall" value={type} />
         </label>
         <label className="space-y-2 text-sm font-semibold text-slate-800">Date
-          <input className={inputClassName} onChange={(event) => setDate(event.target.value)} type="date" value={date} />
+          <input
+            className={inputClassName}
+            min={todayDateString}
+            onChange={(event) => {
+              const val = event.target.value
+              if (!val || val >= todayDateString) {
+                setDate(val)
+                if (val === todayDateString && searchStartTime && searchStartTime < nextHourTimeString) {
+                  setSearchStartTime(nextHourTimeString)
+                }
+              }
+            }}
+            type="date"
+            value={date}
+          />
         </label>
         <label className="space-y-2 text-sm font-semibold text-slate-800">Start time (optional)
-          <input className={inputClassName} onChange={(event) => setSearchStartTime(event.target.value)} type="time" value={searchStartTime} />
+          <input
+            className={inputClassName}
+            onChange={(event) => {
+              const val = event.target.value
+              if (isToday && val && val < nextHourTimeString) {
+                setSearchStartTime(nextHourTimeString)
+              } else {
+                setSearchStartTime(val)
+              }
+            }}
+            min={isToday ? nextHourTimeString : undefined}
+            type="time"
+            value={searchStartTime}
+          />
         </label>
         <label className="space-y-2 text-sm font-semibold text-slate-800">End time (optional)
           <input className={inputClassName} onChange={(event) => setSearchEndTime(event.target.value)} type="time" value={searchEndTime} />
@@ -950,11 +1032,25 @@ export function MemberDashboard() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="block space-y-1.5 text-sm font-medium text-slate-700">
                       Start time
-                      <input className={inputClassName} onChange={(event) => setStartTime(event.target.value)} required type="time" value={startTime} />
+                      <input
+                        className={inputClassName}
+                        onChange={(event) => setStartTime(event.target.value)}
+                        required
+                        type="time"
+                        value={startTime}
+                        min={isToday ? nextHourTimeString : undefined}
+                      />
                     </label>
                     <label className="block space-y-1.5 text-sm font-medium text-slate-700">
                       End time
-                      <input className={inputClassName} onChange={(event) => setEndTime(event.target.value)} required type="time" value={endTime} />
+                      <input
+                        className={inputClassName}
+                        onChange={(event) => setEndTime(event.target.value)}
+                        required
+                        type="time"
+                        value={endTime}
+                        min={startTime || (isToday ? nextHourTimeString : undefined)}
+                      />
                     </label>
                   </div>
                   {error && <p aria-live="polite" className="rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800" role="alert">{error}</p>}
@@ -1546,30 +1642,25 @@ export function MemberDashboard() {
                         </button>
 
                         <div className="flex items-center gap-2">
-                          {memberBooking.status === 'CONFIRMED' && (
-                            <button
-                              className="rounded-lg border border-blue-300 bg-white px-2.5 py-1 text-xs font-semibold text-blue-800 transition hover:bg-blue-50"
-                              onClick={() => {
-                                setEditingBooking(memberBooking)
-                                setEditStartTime(memberBooking.startTime.slice(0, 16))
-                                setEditEndTime(memberBooking.endTime.slice(0, 16))
-                                setError('')
-                              }}
-                              type="button"
-                            >
-                              Change time
-                            </button>
-                          )}
                           {['CONFIRMED', 'PENDING', 'PENDING_APPROVAL'].includes(memberBooking.status) && (
-                            <button
-                              className="rounded-lg border border-red-300 bg-white px-2.5 py-1 text-xs font-semibold text-red-800 transition hover:bg-red-50 disabled:opacity-60"
-                              disabled={loading}
-                              onClick={() => void cancelBooking(memberBooking)}
-                              type="button"
-                              aria-label="Cancel booking"
-                            >
-                              Cancel
-                            </button>
+                            isCancellationWindowOpen(memberBooking) ? (
+                              <button
+                                className="rounded-lg border border-red-300 bg-white px-2.5 py-1 text-xs font-semibold text-red-800 transition hover:bg-red-50 disabled:opacity-60"
+                                disabled={loading}
+                                onClick={() => void cancelBooking(memberBooking)}
+                                type="button"
+                                aria-label="Cancel booking"
+                              >
+                                Cancel
+                              </button>
+                            ) : memberBooking.status === 'CONFIRMED' ? (
+                              <span
+                                className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-400"
+                                title="Confirmed bookings cannot be cancelled within 2 hours of the scheduled start time"
+                              >
+                                Cancellation closed (&lt;2h)
+                              </span>
+                            ) : null
                           )}
                           <span
                             className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${memberBooking.status === 'CONFIRMED'
@@ -1603,11 +1694,11 @@ export function MemberDashboard() {
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-2 text-sm font-semibold text-slate-800">
                 New start time
-                <input className={inputClassName} onChange={(event) => setEditStartTime(event.target.value)} required type="datetime-local" value={editStartTime} />
+                <input className={inputClassName} min={new Date().toISOString().slice(0, 16)} onChange={(event) => setEditStartTime(event.target.value)} required type="datetime-local" value={editStartTime} />
               </label>
               <label className="space-y-2 text-sm font-semibold text-slate-800">
                 New end time
-                <input className={inputClassName} onChange={(event) => setEditEndTime(event.target.value)} required type="datetime-local" value={editEndTime} />
+                <input className={inputClassName} min={new Date().toISOString().slice(0, 16)} onChange={(event) => setEditEndTime(event.target.value)} required type="datetime-local" value={editEndTime} />
               </label>
             </div>
             {error && <p aria-live="polite" className="rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800" role="alert">{error}</p>}
