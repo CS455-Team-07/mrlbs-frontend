@@ -5,7 +5,7 @@ const baseUrl = (() => {
     // Development mode: point to backend running on port 8080
     return 'http://localhost:8080/api';
   }
-  return import.meta.env.VITE_API_BASE_URL ?? '/api';
+  return import.meta.env.VITE_API_BASE_URL || 'https://mrlbs-backend.onrender.com/api';
 })();
 
 export const apiClientConfig = {

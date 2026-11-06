@@ -1,4 +1,5 @@
 import { apiClientConfig, csrfFetch } from './apiClient'
+import { getActiveUserProfile } from './userService'
 
 export interface ExtractedIntent {
   resourceType?: string | null
@@ -41,8 +42,15 @@ export interface AiRecommendationResponse {
 }
 
 export async function getAiStatus(): Promise<{ enabled: boolean; geminiConfigured: boolean; model: string }> {
+  const activeUser = getActiveUserProfile()
+  const headers: Record<string, string> = {}
+  if (activeUser?.email) {
+    headers['X-User-Email'] = activeUser.email
+  }
+
   const response = await fetch(`${apiClientConfig.baseUrl}/ai/status`, {
     credentials: 'include',
+    headers,
   })
   if (!response.ok) {
     throw new Error('Failed to retrieve AI status')
@@ -55,11 +63,17 @@ export async function askAiAssistant(
   contextDate?: string,
   previousIntent?: ExtractedIntent | null,
 ): Promise<AiRecommendationResponse> {
+  const activeUser = getActiveUserProfile()
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (activeUser?.email) {
+    headers['X-User-Email'] = activeUser.email
+  }
+
   const response = await csrfFetch(`${apiClientConfig.baseUrl}/ai/recommend`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       prompt,
       contextDate: contextDate || new Date().toISOString().split('T')[0],
@@ -69,7 +83,7 @@ export async function askAiAssistant(
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => null)
-    throw new Error(errorBody?.message ?? errorBody?.detail ?? 'AI service request failed')
+    throw new Error(errorBody?.message ?? errorBody?.detail ?? errorBody?.error ?? 'AI service request failed')
   }
 
   return response.json()
