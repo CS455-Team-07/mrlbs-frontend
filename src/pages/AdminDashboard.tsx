@@ -551,23 +551,31 @@ export function AdminDashboard() {
                               )
                             })()}
                           </div>
-                          <div className="flex shrink-0 justify-end gap-2 self-end sm:self-center">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenReject(request)}
-                              disabled={processingApprovalIds.has(request.id)}
-                              className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60 cursor-pointer"
-                            >
-                              Reject
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleApprove(request)}
-                              disabled={processingApprovalIds.has(request.id)}
-                              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
-                            >
-                              {processingApprovalIds.has(request.id) ? 'Updating...' : 'Approve'}
-                            </button>
+                          <div className="flex shrink-0 items-center justify-end gap-2 self-end sm:self-center">
+                            {new Date(request.startTime).getTime() - 15 * 60 * 1000 <= Date.now() ? (
+                              <span className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
+                                ⏱️ Expired (Past review cutoff)
+                              </span>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenReject(request)}
+                                  disabled={processingApprovalIds.has(request.id)}
+                                  className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60 cursor-pointer"
+                                >
+                                  Reject
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleApprove(request)}
+                                  disabled={processingApprovalIds.has(request.id)}
+                                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
+                                >
+                                  {processingApprovalIds.has(request.id) ? 'Updating...' : 'Approve'}
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>

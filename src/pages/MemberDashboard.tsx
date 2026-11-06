@@ -95,9 +95,21 @@ function getNextHourTimeString(): string {
   return String(nextHour).padStart(2, '0') + ":00";
 }
 
+function isBookingCompleted(booking: MemberBooking): boolean {
+  if (booking.status === 'COMPLETED') return true
+  if (booking.status === 'CONFIRMED') {
+    const endMs = new Date(booking.endTime).getTime()
+    return !isNaN(endMs) && endMs < Date.now()
+  }
+  return false
+}
+
 function isCancellationWindowOpen(booking: MemberBooking): boolean {
   if (booking.status !== 'CONFIRMED') {
     return true
+  }
+  if (isBookingCompleted(booking)) {
+    return false
   }
   const startMs = new Date(booking.startTime).getTime()
   if (isNaN(startMs)) return true
@@ -1642,7 +1654,7 @@ export function MemberDashboard() {
                         </button>
 
                         <div className="flex items-center gap-2">
-                          {['CONFIRMED', 'PENDING', 'PENDING_APPROVAL'].includes(memberBooking.status) && (
+                          {!isBookingCompleted(memberBooking) && ['CONFIRMED', 'PENDING', 'PENDING_APPROVAL'].includes(memberBooking.status) && (
                             isCancellationWindowOpen(memberBooking) ? (
                               <button
                                 className="rounded-lg border border-red-300 bg-white px-2.5 py-1 text-xs font-semibold text-red-800 transition hover:bg-red-50 disabled:opacity-60"
@@ -1663,20 +1675,23 @@ export function MemberDashboard() {
                             ) : null
                           )}
                           <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${memberBooking.status === 'CONFIRMED'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : memberBooking.status === 'CANCELLED'
-                                ? 'border border-red-200 bg-red-50 text-red-700'
-                                : memberBooking.status === 'REJECTED'
-                                  ? 'border border-rose-200 bg-rose-50 text-rose-700'
-                                  : memberBooking.status === 'PENDING' || memberBooking.status === 'PENDING_APPROVAL'
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : memberBooking.status === 'DRAFT'
-                                      ? 'bg-amber-100 text-amber-800'
-                                      : 'bg-slate-200 text-slate-700'
+                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${
+                              isBookingCompleted(memberBooking) || memberBooking.status === 'COMPLETED'
+                                ? 'border border-blue-200 bg-blue-50 text-blue-700'
+                                : memberBooking.status === 'CONFIRMED'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : memberBooking.status === 'CANCELLED'
+                                    ? 'border border-red-200 bg-red-50 text-red-700'
+                                    : memberBooking.status === 'REJECTED'
+                                      ? 'border border-rose-200 bg-rose-50 text-rose-700'
+                                      : memberBooking.status === 'PENDING' || memberBooking.status === 'PENDING_APPROVAL'
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : memberBooking.status === 'DRAFT'
+                                          ? 'bg-amber-100 text-amber-800'
+                                          : 'bg-slate-200 text-slate-700'
                               }`}
                           >
-                            {memberBooking.status}
+                            {isBookingCompleted(memberBooking) ? 'COMPLETED' : memberBooking.status}
                           </span>
                         </div>
                       </div>
