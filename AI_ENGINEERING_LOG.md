@@ -525,3 +525,41 @@ Admin resource onboarding now succeeds from the frontend form when logged in as 
 **Decision:** Accepted.
 
 **Reason:** The user requested conflict resolution on their branches.
+
+#### 2026-11-06 — Frontend verification and coverage
+
+**Task / Context**
+
+Collect verification evidence on a branch based on frontend `main` at `bce1818` and restore the failing workflow tests.
+
+**Prompt**
+
+The user requested test, coverage, security, concurrency, performance, and recovery reports, plus defects with fixes, GitHub issues, and a pull request.
+
+**AI Output**
+
+Ran Vitest and reproduced 13 failures out of 46 tests. Updated the login, routing, and booking tests for the current labels, API requests, and draft and confirmation flow. Added a V8 coverage command.
+
+**Student / Team Evaluation**
+
+Pending human review.
+
+**Errors / Risks / Hallucinations**
+
+The browser component tests use mocked HTTP. The time-window change test exercises the UI contract, and the backend baseline lacks the corresponding route. Lint reports three errors and three warnings in existing application code.
+
+**Changes Made After Evaluation**
+
+Adjusted the assertions and fixtures for current workflow behavior. All 46 tests passed with coverage, and the production build succeeded.
+
+**Final Artifact / Output**
+
+Updated workflow tests and coverage configuration, tracked in GitHub issue #27.
+
+**Decision**
+
+Pending human review.
+
+**Reason**
+
+The tests verify the workflows implemented by the current frontend and the coverage command reproduces the reported metrics.
