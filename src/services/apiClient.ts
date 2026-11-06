@@ -1,12 +1,11 @@
-// const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
-// src/services/apiClient.ts
 const baseUrl = (() => {
-  if (import.meta.env.DEV) {
-    // Development mode: point to backend running on port 8080
-    return 'http://localhost:8080/api';
+  const configured = import.meta.env.VITE_API_BASE_URL
+    || (import.meta.env.DEV ? 'http://localhost:8080/api' : 'https://mrlbs-backend.onrender.com/api')
+  if (import.meta.env.PROD && !configured.startsWith('https://') && !/^\/(?![\/\\])/.test(configured)) {
+    throw new Error('The production API must use HTTPS or a same-origin path.')
   }
-  return import.meta.env.VITE_API_BASE_URL || 'https://mrlbs-backend.onrender.com/api';
-})();
+  return configured.replace(/\/+$/, '')
+})()
 
 export const apiClientConfig = {
   baseUrl,
@@ -64,8 +63,9 @@ export function clearCsrfTokenCache(): void {
 export async function csrfFetch(
   url: string,
   options: RequestInit = {},
+  forceRefresh = false,
 ): Promise<Response> {
-  const csrf = await getCsrfToken()
+  const csrf = await getCsrfToken(forceRefresh)
 
   return fetch(url, {
     ...options,

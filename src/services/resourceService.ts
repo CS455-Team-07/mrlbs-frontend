@@ -1,9 +1,8 @@
 
 import type { Resource } from '../types/Resource'
-import { csrfFetch } from './apiClient'
+import { apiClientConfig, csrfFetch } from './apiClient'
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
+const API_BASE_URL = apiClientConfig.baseUrl
 
 export async function getResources(): Promise<Resource[]> {
   const response = await fetch(`${API_BASE_URL}/resources`, {

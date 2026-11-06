@@ -7,7 +7,7 @@ import {
   type AuthenticatedIdentity,
 } from '../services/userService'
 import type { UserProfile } from '../types/User'
-import { apiClientConfig } from '../services/apiClient'
+import { apiClientConfig, clearCsrfTokenCache, csrfFetch } from '../services/apiClient'
 import { AuthContext } from './authContextInstance'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -41,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = useCallback((identity: AuthenticatedIdentity): UserProfile => {
+    clearCsrfTokenCache()
     const profile = handleUserAuthentication(identity)
     currentUser.current = profile
     setUser(profile)
@@ -49,13 +50,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch(`${apiClientConfig.baseUrl}/auth/logout`, {
+      const response = await csrfFetch(`${apiClientConfig.baseUrl}/auth/logout`, {
         method: 'POST',
-        credentials: 'include',
       })
+      if (response.status === 403) {
+        await csrfFetch(`${apiClientConfig.baseUrl}/auth/logout`, { method: 'POST' }, true)
+      }
     } catch {
       // Always clear the local profile even when the backend session expired.
     }
+    clearCsrfTokenCache()
     setActiveUserProfile(null)
     clearUserStorage()
     currentUser.current = null

@@ -7,10 +7,9 @@ import {
   getInactiveResources,
   restoreResource,
 } from '../services/resourceService'
-import { csrfFetch } from '../services/apiClient'
+import { apiClientConfig, csrfFetch } from '../services/apiClient'
 import { getScopeForEmail } from '../config/adminConfig'
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
+const API_BASE_URL = apiClientConfig.baseUrl
 type ResourceDraft = {
   name: string
   type: string

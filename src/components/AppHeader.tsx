@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { getScopeForEmail } from '../config/adminConfig'
+import { apiClientConfig } from '../services/apiClient'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
+const API_BASE_URL = apiClientConfig.baseUrl
 
 export function AppHeader() {
   const { user, isAuthenticated, logout } = useAuth()

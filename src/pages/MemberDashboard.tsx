@@ -743,11 +743,12 @@ export function MemberDashboard() {
       }
       if (user?.email) headers['X-User-Email'] = user.email
 
-      await fetch(`${apiClientConfig.baseUrl}/waitlist/notifications/${id}/read`, {
+      const response = await fetch(`${apiClientConfig.baseUrl}/waitlist/notifications/${id}/read`, {
         method: 'POST',
         credentials: 'include',
         headers,
       })
+      if (!response.ok) return
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)))
     } catch (e) {
       console.warn('Could not mark notification as read', e)

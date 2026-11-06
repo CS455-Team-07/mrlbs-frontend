@@ -563,3 +563,41 @@ Pending human review.
 **Reason**
 
 The tests verify the workflows implemented by the current frontend and the coverage command reproduces the reported metrics.
+
+#### 2026-11-06 — BOOK-117, BOOK-118 and BOOK-119 frontend integration
+
+**Task / Context**
+
+Keep member and scoped admin workflows working with verified backend sessions and HTTPS production APIs.
+
+**Prompt**
+
+The user asked to implement the three Jira security tickets and test the running app and existing workflows.
+
+**AI Output**
+
+Unified frontend API URL handling, updated the sign-in text for verified sessions, sent a CSRF token on logout, and only updated inbox state when the server accepted the action.
+
+**Student / Team Evaluation**
+
+Pending human review.
+
+**Errors / Risks / Hallucinations**
+
+The live run used a local HTTPS server and a local STARTTLS mailbox. Hosted browser cookie and proxy behavior depends on deployment configuration.
+
+**Changes Made After Evaluation**
+
+Ran the built frontend in Chrome against the real HTTPS backend and PostgreSQL. Verified sign-in, booking, member history, the scoped approval UI, and logout. The production build succeeded and all 46 Vitest tests passed.
+
+**Final Artifact / Output**
+
+Frontend integration for the verified backend session and HTTPS deployment.
+
+**Decision**
+
+Pending human review.
+
+**Reason**
+
+All frontend calls now use the same production API policy and the browser workflows were exercised against the running stack.
