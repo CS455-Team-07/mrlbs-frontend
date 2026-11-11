@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useRef, useCallback, type FormEvent } from 'react'
-import { apiClientConfig, csrfFetch, getCsrfToken } from '../services/apiClient'
+import { apiClientConfig, getCsrfToken } from '../services/apiClient'
 import { AuthContext } from '../context/authContextInstance'
 import { AiAssistantDrawer } from '../components/AiAssistantDrawer'
 import type { ResourceRecommendation } from '../services/aiService'
@@ -220,32 +220,27 @@ export function MemberDashboard() {
     }))
   )
 
-  // Auto-sync member session and auto-load bookings and waitlist on mount
+  // Load member credits, bookings, and waitlist on mount
   useEffect(() => {
-    async function initMemberSession() {
+    async function loadMemberDashboard() {
       if (user?.email) {
         try {
-          const res = await csrfFetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: user.email, name: user.name }),
-            credentials: 'include',
-          })
+          const res = await fetch(`${apiClientConfig.baseUrl}/auth/member-credits`, { credentials: 'include' })
           if (res.ok) {
-            const data = (await res.json().catch(() => null)) as { creditsBalance?: number } | null
-            if (data?.creditsBalance != null) {
-              setMemberCreditBalance(Number(data.creditsBalance))
+            const data = (await res.json().catch(() => null)) as { creditBalance?: number } | null
+            if (data?.creditBalance != null) {
+              setMemberCreditBalance(Number(data.creditBalance))
             }
           }
         } catch (e) {
-          console.warn('Could not sync member session with backend', e)
+          console.warn('Could not load member credits', e)
         }
         void loadBookings()
         void loadWaitlists()
         void loadOffersAndNotifications()
       }
     }
-    void initMemberSession()
+    void loadMemberDashboard()
   }, [user?.email, user?.name])
 
   // Real-time ticking timer for offer countdowns
@@ -445,34 +440,17 @@ export function MemberDashboard() {
     setError('')
     try {
       const csrf = await getCsrfToken()
-      let response = await fetch(`${apiClientConfig.baseUrl}/bookings/draft`, {
+      const response = await fetch(`${apiClientConfig.baseUrl}/bookings/draft`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
         body: JSON.stringify({ resourceId: selectedResource.id, startTime: `${date}T${startTime}`, endTime: `${date}T${endTime}` }),
       })
       if (!response.ok) {
         const problem = (await response.json().catch(() => null)) as ApiProblem | null
-        if (problem?.detail?.includes('Authenticated member identity is required') && user?.email) {
-          // Re-sync session cookie with backend and retry once
-          await csrfFetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: user.email, name: user.name }),
-            credentials: 'include',
-          })
-          response = await fetch(`${apiClientConfig.baseUrl}/bookings/draft`, {
-            method: 'POST', credentials: 'include',
-            headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
-            body: JSON.stringify({ resourceId: selectedResource.id, startTime: `${date}T${startTime}`, endTime: `${date}T${endTime}` }),
-          })
-        }
-        if (!response.ok) {
-          const retryProblem = (await response.json().catch(() => null)) as ApiProblem | null
-          const msg = getFriendlyErrorMessage(retryProblem || problem)
-          setRejectionModalReason(msg)
-          setShowRejectionModal(true)
-          return
-        }
+        const msg = getFriendlyErrorMessage(problem)
+        setRejectionModalReason(msg)
+        setShowRejectionModal(true)
+        return
       }
       const draft = (await response.json()) as BookingResult
       if (draft.memberBalance != null) {
@@ -512,33 +490,17 @@ export function MemberDashboard() {
     setError('')
     try {
       const csrf = await getCsrfToken()
-      let response = await fetch(`${apiClientConfig.baseUrl}/bookings/${draftBooking.id}/confirm`, {
+      const response = await fetch(`${apiClientConfig.baseUrl}/bookings/${draftBooking.id}/confirm`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
       })
       if (!response.ok) {
         const problem = (await response.json().catch(() => null)) as ApiProblem | null
-        if (problem?.detail?.includes('Authenticated member identity is required') && user?.email) {
-          // Re-sync session cookie with backend and retry once
-          await csrfFetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: user.email, name: user.name }),
-            credentials: 'include',
-          })
-          response = await fetch(`${apiClientConfig.baseUrl}/bookings/${draftBooking.id}/confirm`, {
-            method: 'POST', credentials: 'include',
-            headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
-          })
-        }
-        if (!response.ok) {
-          const retryProblem = (await response.json().catch(() => null)) as ApiProblem | null
-          const msg = getFriendlyErrorMessage(retryProblem || problem)
-          await cancelDraft(draftBooking.id)
-          setRejectionModalReason(msg)
-          setShowRejectionModal(true)
-          return
-        }
+        const msg = getFriendlyErrorMessage(problem)
+        await cancelDraft(draftBooking.id)
+        setRejectionModalReason(msg)
+        setShowRejectionModal(true)
+        return
       }
       const confirmed = (await response.json()) as BookingResult
       if (confirmed.memberBalance != null) {
@@ -576,11 +538,7 @@ export function MemberDashboard() {
     setLoading(true)
     setError('')
     try {
-      const headers: Record<string, string> = {}
-      if (user?.email) {
-        headers['X-User-Email'] = user.email
-      }
-      const response = await fetch(`${apiClientConfig.baseUrl}/bookings`, { credentials: 'include', headers })
+      const response = await fetch(`${apiClientConfig.baseUrl}/bookings`, { credentials: 'include' })
       if (!response.ok) throw new Error('Your bookings could not be loaded.')
       const data = (await response.json().catch(() => null)) as unknown
       setMemberBookings(Array.isArray(data) ? (data as MemberBooking[]) : [])
@@ -593,13 +551,8 @@ export function MemberDashboard() {
     setWaitlistLoading(true)
     setWaitlistError('')
     try {
-      const headers: Record<string, string> = {}
-      if (user?.email) {
-        headers['X-User-Email'] = user.email
-      }
       const response = await fetch(`${apiClientConfig.baseUrl}/waitlist`, {
         credentials: 'include',
-        headers,
       })
       if (!response.ok) throw new Error('Your waitlist entries could not be loaded.')
       const data = (await response.json().catch(() => null)) as unknown
@@ -618,9 +571,6 @@ export function MemberDashboard() {
     try {
       const csrf = await getCsrfToken()
       const headers: Record<string, string> = { [csrf.headerName]: csrf.token }
-      if (user?.email) {
-        headers['X-User-Email'] = user.email
-      }
       const response = await fetch(`${apiClientConfig.baseUrl}/waitlist/${entryId}`, {
         method: 'DELETE',
         credentials: 'include',
@@ -645,10 +595,9 @@ export function MemberDashboard() {
     if (!user?.email) return
     setOffersLoading(true)
     try {
-      const headers: Record<string, string> = { 'X-User-Email': user.email }
       const [offersRes, notifsRes] = await Promise.all([
-        fetch(`${apiClientConfig.baseUrl}/waitlist/offers`, { credentials: 'include', headers }),
-        fetch(`${apiClientConfig.baseUrl}/waitlist/notifications`, { credentials: 'include', headers }),
+        fetch(`${apiClientConfig.baseUrl}/waitlist/offers`, { credentials: 'include' }),
+        fetch(`${apiClientConfig.baseUrl}/waitlist/notifications`, { credentials: 'include' }),
       ])
       if (offersRes.ok) {
         const offersData = (await offersRes.json().catch(() => [])) as WaitlistOfferItem[]
@@ -674,7 +623,6 @@ export function MemberDashboard() {
       const headers: Record<string, string> = {
         [csrf.headerName]: csrf.token,
       }
-      if (user?.email) headers['X-User-Email'] = user.email
 
       const res = await fetch(`${apiClientConfig.baseUrl}/waitlist/offers/${offerId}/accept`, {
         method: 'POST',
@@ -713,7 +661,6 @@ export function MemberDashboard() {
       const headers: Record<string, string> = {
         [csrf.headerName]: csrf.token,
       }
-      if (user?.email) headers['X-User-Email'] = user.email
 
       const res = await fetch(`${apiClientConfig.baseUrl}/waitlist/offers/${offerId}/decline`, {
         method: 'POST',
@@ -741,7 +688,6 @@ export function MemberDashboard() {
       const headers: Record<string, string> = {
         [csrf.headerName]: csrf.token,
       }
-      if (user?.email) headers['X-User-Email'] = user.email
 
       const response = await fetch(`${apiClientConfig.baseUrl}/waitlist/notifications/${id}/read`, {
         method: 'POST',
@@ -803,9 +749,6 @@ export function MemberDashboard() {
     try {
       const csrf = await getCsrfToken()
       const headers: Record<string, string> = { [csrf.headerName]: csrf.token }
-      if (user?.email) {
-        headers['X-User-Email'] = user.email
-      }
       const response = await fetch(`${apiClientConfig.baseUrl}/bookings/${memberBooking.id}`, {
         method: 'DELETE', credentials: 'include', headers,
       })

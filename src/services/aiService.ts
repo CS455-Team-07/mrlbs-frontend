@@ -1,5 +1,4 @@
 import { apiClientConfig, csrfFetch } from './apiClient'
-import { getActiveUserProfile } from './userService'
 
 export interface ExtractedIntent {
   resourceType?: string | null
@@ -42,15 +41,9 @@ export interface AiRecommendationResponse {
 }
 
 export async function getAiStatus(): Promise<{ enabled: boolean; geminiConfigured: boolean; model: string }> {
-  const activeUser = getActiveUserProfile()
-  const headers: Record<string, string> = {}
-  if (activeUser?.email) {
-    headers['X-User-Email'] = activeUser.email
-  }
 
   const response = await fetch(`${apiClientConfig.baseUrl}/ai/status`, {
     credentials: 'include',
-    headers,
   })
   if (!response.ok) {
     throw new Error('Failed to retrieve AI status')
@@ -63,12 +56,8 @@ export async function askAiAssistant(
   contextDate?: string,
   previousIntent?: ExtractedIntent | null,
 ): Promise<AiRecommendationResponse> {
-  const activeUser = getActiveUserProfile()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-  }
-  if (activeUser?.email) {
-    headers['X-User-Email'] = activeUser.email
   }
 
   const response = await csrfFetch(`${apiClientConfig.baseUrl}/ai/recommend`, {

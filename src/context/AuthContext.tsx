@@ -21,7 +21,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(async (response) => {
         if (!response.ok) throw new Error('No active server session')
         const identity = (await response.json()) as AuthenticatedIdentity
-        if (!identity.id || !identity.email?.trim().toLowerCase().endsWith('@iitk.ac.in')) {
+        if (!identity.id || !identity.email?.trim().toLowerCase().endsWith('@iitk.ac.in')
+            || (identity.role !== 'member' && identity.role !== 'admin')) {
           throw new Error('Server session has no verified IITK identity')
         }
         if (!cancelled && !currentUser.current) {
@@ -64,11 +65,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearUserStorage()
     currentUser.current = null
     setUser(null)
-    // Clear both demo-identity cookies so neither a stale admin nor a stale
-    // member session can bleed into the next login.
-    document.cookie = 'DEMO_ADMIN_EMAIL=; path=/; max-age=0'
-    document.cookie = 'DEMO_MEMBER_EMAIL=; path=/; max-age=0'
-    document.cookie = 'DEMO_USER_EMAIL=; path=/; max-age=0'
   }
 
   const updateProfile = (

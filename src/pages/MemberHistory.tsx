@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { apiClientConfig, csrfFetch } from '../services/apiClient'
+import { apiClientConfig } from '../services/apiClient'
 
 interface MemberBooking {
   id: string
@@ -31,33 +31,7 @@ export function MemberHistory() {
       setLoading(true)
       setError(null)
       try {
-        const headers: Record<string, string> = {}
-        if (user?.email) {
-          headers['X-User-Email'] = user.email
-        }
-
-        let response = await fetch(`${apiClientConfig.baseUrl}/bookings`, {
-          credentials: 'include',
-          headers,
-        })
-
-        // If unauthorized or failed and user is logged in, attempt session re-sync once
-        if (!response.ok && user?.email) {
-          try {
-            await csrfFetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: user.email, name: user.name }),
-              credentials: 'include',
-            })
-            response = await fetch(`${apiClientConfig.baseUrl}/bookings`, {
-              credentials: 'include',
-              headers,
-            })
-          } catch {
-            // Re-sync attempt failed, proceed to error check
-          }
-        }
+        const response = await fetch(`${apiClientConfig.baseUrl}/bookings`, { credentials: 'include' })
 
         if (!response.ok) {
           throw new Error('Failed to load booking history')

@@ -11,11 +11,11 @@ afterEach(() => {
 })
 
 describe('application navigation and institutional authentication', () => {
-  it('shows one-time code sign-in from the login route', () => {
+  it('shows password sign-in from the login route', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
     render(<MemoryRouter initialEntries={['/login']}><AppRoutes /></MemoryRouter>)
 
-    expect(screen.getByRole('heading', { name: /sign in to mrlbs/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /continue to sign in/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Password')).toBeInTheDocument()
   })
 })

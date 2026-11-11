@@ -1,100 +1,107 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from '../context/AuthContext'
-import { clearUserStorage, handleUserAuthentication, setActiveUserProfile } from '../services/userService'
+import { clearCsrfTokenCache } from '../services/apiClient'
+import { clearUserStorage, handleUserAuthentication } from '../services/userService'
 import { LoginPage } from './LoginPage'
+
+const email = 'ananya@iitk.ac.in'
+const password = 'example test password'
 
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  clearCsrfTokenCache()
   clearUserStorage()
 })
 
 function renderLoginPage() {
-  if (!vi.isMockFunction(fetch)) {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(false, {})))
-  }
   return render(
     <AuthProvider>
       <MemoryRouter initialEntries={['/login']}>
-        <LoginPage />
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/member" element={<h1>Member dashboard</h1>} />
+        </Routes>
       </MemoryRouter>
     </AuthProvider>,
   )
 }
 
-function response(ok: boolean, body: object) {
-  return { ok, status: ok ? 200 : 400, json: async () => body, text: async () => JSON.stringify(body) }
+function response(status: number, body: object = {}) {
+  return { ok: status >= 200 && status < 300, status, json: async () => body }
 }
 
-describe('institutional email sign-in', () => {
-  it('offers one-time-code sign-in restricted to IITK email', () => {
-    renderLoginPage()
+function enter(label: string | RegExp, value: string) {
+  fireEvent.change(screen.getByLabelText(label), { target: { value } })
+}
 
-    expect(screen.getByLabelText(/iitk member email address/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /continue to sign in/i })).toBeInTheDocument()
-  })
-
-  it('starts member login through the API and proceeds to code entry', async () => {
+describe('institutional password sign-in', () => {
+  it('signs in with a password and the backend-issued role', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(response(false, {}))
-      .mockResolvedValueOnce(response(true, { status: 'OTP_REQUIRED', message: 'Code sent' }))
+      .mockResolvedValueOnce(response(401))
+      .mockResolvedValueOnce(response(200, { token: 'csrf-token', headerName: 'X-CSRF-TOKEN' }))
+      .mockResolvedValueOnce(response(200, { id: 'member-id', name: 'Ananya', email, role: 'member' }))
     vi.stubGlobal('fetch', fetchMock)
     renderLoginPage()
 
-    fireEvent.change(screen.getByLabelText(/iitk member email address/i), { target: { value: 'ananya@iitk.ac.in' } })
-    fireEvent.click(screen.getByRole('button', { name: /continue to sign in/i }))
+    enter('IITK email address', email)
+    enter('Password', password)
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    expect(await screen.findByLabelText(/6-digit verification code/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Member dashboard' })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenLastCalledWith(
-      'http://localhost:8080/api/auth/login',
-      expect.objectContaining({ method: 'POST', credentials: 'include', body: JSON.stringify({ email: 'ananya@iitk.ac.in', role: 'member' }) }),
+      expect.stringMatching(/\/auth\/login$/),
+      expect.objectContaining({ method: 'POST', credentials: 'include', body: JSON.stringify({ email, password }) }),
     )
   })
 
-  it('creates a local profile only after the backend verifies the code', async () => {
+  it('uses the emailed code to save a password and returns to sign-in', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(response(false, {}))
-      .mockResolvedValueOnce(response(true, { status: 'OTP_REQUIRED', message: 'Code sent' }))
-      .mockResolvedValueOnce(response(true, { id: 'mail-ananya@iitk.ac.in', name: 'Ananya', email: 'ananya@iitk.ac.in' }))
+      .mockResolvedValueOnce(response(401))
+      .mockResolvedValueOnce(response(200, { token: 'csrf-token', headerName: 'X-CSRF-TOKEN' }))
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204))
     vi.stubGlobal('fetch', fetchMock)
     renderLoginPage()
 
-    fireEvent.change(screen.getByLabelText(/iitk member email address/i), { target: { value: 'ananya@iitk.ac.in' } })
-    fireEvent.click(screen.getByRole('button', { name: /continue to sign in/i }))
-    const codeField = await screen.findByLabelText(/6-digit verification code/i)
+    fireEvent.click(screen.getByRole('button', { name: /forgot password/i }))
+    enter('IITK email address', email)
+    fireEvent.click(screen.getByRole('button', { name: 'Send verification code' }))
+    expect(await screen.findByLabelText('Verification code')).toBeInTheDocument()
+    enter('Verification code', '123456')
+    enter('New password', password)
+    enter('Confirm new password', password)
+    fireEvent.click(screen.getByRole('button', { name: 'Save password' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Password saved.')
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringMatching(/\/auth\/reset-password$/),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ email, password, code: '123456' }) }),
+    )
     expect(localStorage.getItem('mrlbs_active_user_profile')).toBeNull()
-    fireEvent.change(codeField, { target: { value: '123456' } })
-    fireEvent.click(screen.getByRole('button', { name: /verify and sign in/i }))
-
-    await waitFor(() => expect(localStorage.getItem('mrlbs_active_user_profile')).toContain('ananya@iitk.ac.in'))
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      'http://localhost:8080/api/auth/verify-code',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: 'ananya@iitk.ac.in', code: '123456' }) }),
-    )
   })
 
-  it('rejects an email outside the configured domain without requesting login', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(response(false, {}))
+  it('rejects non-IITK email before sending a login request', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(401))
     vi.stubGlobal('fetch', fetchMock)
     renderLoginPage()
 
-    fireEvent.change(screen.getByLabelText(/iitk member email address/i), { target: { value: 'person@example.com' } })
-    fireEvent.click(screen.getByRole('button', { name: /continue to sign in/i }))
+    enter('IITK email address', 'person@example.com')
+    enter('Password', password)
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Only @iitk.ac.in email addresses are accepted.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Use your @iitk.ac.in email address.')
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(localStorage.getItem('mrlbs_active_user_profile')).toBeNull()
   })
 
-  it('does not restore a cached profile without a valid backend session', async () => {
-    setActiveUserProfile(handleUserAuthentication({ email: 'ananya@iitk.ac.in', name: 'Ananya' }))
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(false, {})))
-
+  it('requires a valid backend session to restore a cached profile', async () => {
+    handleUserAuthentication({ email, name: 'Ananya' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(401)))
     renderLoginPage()
 
     await waitFor(() => expect(localStorage.getItem('mrlbs_active_user_profile')).toBeNull())
-    expect(screen.getByRole('button', { name: /continue to sign in/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
   })
 })
