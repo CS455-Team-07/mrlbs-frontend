@@ -127,6 +127,8 @@ export function MemberHistory() {
 
   const getStatusBadgeClass = (status: string) => {
     switch (status?.toUpperCase()) {
+      case 'COMPLETED':
+        return 'border border-blue-200 bg-blue-50 text-blue-700'
       case 'CONFIRMED':
         return 'border border-emerald-200 bg-emerald-50 text-emerald-700'
       case 'IN_PROGRESS':
@@ -186,7 +188,10 @@ export function MemberHistory() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 text-slate-800">
-            {items.map((b) => (
+            {items.map((b) => {
+              const isCompleted = b.status === 'COMPLETED' || (b.status === 'CONFIRMED' && new Date(b.endTime).getTime() < now)
+              const effectiveStatus = isCompleted ? 'COMPLETED' : b.status
+              return (
               <tr key={b.id} className="transition hover:bg-slate-50/60">
                 <td className="px-4 py-3 font-medium text-slate-900">
                   {b.resourceName || (
@@ -207,10 +212,10 @@ export function MemberHistory() {
                   <div className="flex flex-col items-start gap-1">
                     <span
                       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${getStatusBadgeClass(
-                        b.status,
+                        effectiveStatus,
                       )}`}
                     >
-                      {b.status}
+                      {effectiveStatus}
                     </span>
                     {b.rejectionReason && (
                       <span className="text-[11px] text-rose-600 max-w-xs break-words" title={b.rejectionReason}>
@@ -220,7 +225,8 @@ export function MemberHistory() {
                   </div>
                 </td>
               </tr>
-            ))}
+            )})
+          }
           </tbody>
         </table>
       </div>

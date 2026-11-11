@@ -18,30 +18,40 @@ export function LandingPage() {
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-8 text-slate-600">
           One platform for lecture halls, GPU clusters, and specialised labs.
-          Sign in with your institutional account to get started.
+          {user ? ' Manage and reserve resources from your dashboard.' : ' Sign in with your institutional account to get started.'}
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           {dashboardPath ? (
-            <Link
-              to={dashboardPath}
-              className="rounded-lg bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-800"
-            >
-              Go to my Dashboard
-            </Link>
+            <>
+              <Link
+                to={dashboardPath}
+                className="rounded-lg bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-800"
+              >
+                Go to my Dashboard
+              </Link>
+              <Link
+                to="/profile"
+                className="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                View Profile
+              </Link>
+            </>
           ) : (
-            <Link
-              to="/login"
-              className="rounded-lg bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-800"
-            >
-              Get Started
-            </Link>
+            <>
+              <Link
+                to="/login"
+                className="rounded-lg bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-800"
+              >
+                Get Started
+              </Link>
+              <Link
+                to="/login"
+                className="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Sign In
+              </Link>
+            </>
           )}
-          <Link
-            to="/login"
-            className="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Sign In
-          </Link>
         </div>
       </div>
 
