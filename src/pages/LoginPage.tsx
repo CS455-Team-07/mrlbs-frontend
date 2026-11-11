@@ -96,11 +96,11 @@ export function LoginPage() {
       } else if (result.status === 'OTP_REQUIRED') {
         // First-time member requires OTP
         setCodeSent(true)
-        setNotice(result.message || `First-time sign in: A verification code has been sent to ${trimmedEmail}.`)
+        setNotice(result.message || `A verification code has been sent to ${trimmedEmail}.`)
       }
     } catch (requestError) {
       if (requestError instanceof TypeError && requestError.message.includes('fetch')) {
-        setError('Cannot connect to backend server at http://localhost:8080. Please make sure the backend is running.')
+        setError('Could not reach the sign-in service. Please try again.')
       } else {
         setError(requestError instanceof Error ? requestError.message : 'Could not complete sign in.')
       }
@@ -136,7 +136,7 @@ export function LoginPage() {
       login(result)
     } catch (verifyError) {
       if (verifyError instanceof TypeError && verifyError.message.includes('fetch')) {
-        setError('Cannot connect to backend server at http://localhost:8080. Please make sure the backend is running.')
+        setError('Could not reach the sign-in service. Please try again.')
       } else {
         setError(verifyError instanceof Error ? verifyError.message : 'Could not verify the code.')
       }
@@ -193,12 +193,12 @@ export function LoginPage() {
           <div className="mb-5 rounded-xl border border-slate-100 bg-slate-50 p-3.5 text-xs text-slate-600">
             {selectedRole === 'member' ? (
               <p>
-                <strong>Member Sign In:</strong> Enter your IIT Kanpur student/faculty email address. First-time sign in sends a one-time OTP code; future logins sign in directly.
+                <strong>Member Sign In:</strong> Enter your IIT Kanpur student or faculty email address to sign in.
               </p>
             ) : (
               <div>
                 <p className="mb-2">
-                  <strong>Administrator Direct Sign In:</strong> Select an authorized admin account or enter your admin email (no OTP required):
+                  <strong>Administrator Sign In:</strong> Select an authorized admin account or enter your admin email.
                 </p>
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {ADMIN_SCOPES.map((admin) => (

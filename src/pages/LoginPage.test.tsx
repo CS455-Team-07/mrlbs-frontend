@@ -25,49 +25,47 @@ function renderLoginPage() {
 }
 
 function response(ok: boolean, body: object) {
-  return { ok, status: ok ? 200 : 400, json: async () => body }
+  return { ok, status: ok ? 200 : 400, json: async () => body, text: async () => JSON.stringify(body) }
 }
 
 describe('institutional email sign-in', () => {
   it('offers one-time-code sign-in restricted to IITK email', () => {
     renderLoginPage()
 
-    expect(screen.getByLabelText(/iitk email address/i)).toBeInTheDocument()
-    expect(screen.getByText(/only/i)).toHaveTextContent('@iitk.ac.in')
-    expect(screen.getByRole('button', { name: /email me a verification code/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/iitk member email address/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /continue to sign in/i })).toBeInTheDocument()
   })
 
-  it('requests a code through the protected API and proceeds to code entry', async () => {
+  it('starts member login through the API and proceeds to code entry', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response(false, {}))
-      .mockResolvedValueOnce(response(true, { token: 'csrf', headerName: 'X-CSRF-TOKEN' }))
-      .mockResolvedValueOnce(response(true, { message: 'Code sent' }))
+      .mockResolvedValueOnce(response(true, { status: 'OTP_REQUIRED', message: 'Code sent' }))
     vi.stubGlobal('fetch', fetchMock)
     renderLoginPage()
 
-    fireEvent.change(screen.getByLabelText(/iitk email address/i), { target: { value: 'ananya@iitk.ac.in' } })
-    fireEvent.click(screen.getByRole('button', { name: /email me a verification code/i }))
+    fireEvent.change(screen.getByLabelText(/iitk member email address/i), { target: { value: 'ananya@iitk.ac.in' } })
+    fireEvent.click(screen.getByRole('button', { name: /continue to sign in/i }))
 
-    expect(await screen.findByLabelText(/six-digit verification code/i)).toBeInTheDocument()
+    expect(await screen.findByLabelText(/6-digit verification code/i)).toBeInTheDocument()
     expect(fetchMock).toHaveBeenLastCalledWith(
-      'http://localhost:8080/api/auth/request-code',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: 'ananya@iitk.ac.in' }) }),
+      'http://localhost:8080/api/auth/login',
+      expect.objectContaining({ method: 'POST', credentials: 'include', body: JSON.stringify({ email: 'ananya@iitk.ac.in', role: 'member' }) }),
     )
   })
 
   it('creates a local profile only after the backend verifies the code', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response(false, {}))
-      .mockResolvedValueOnce(response(true, { token: 'csrf', headerName: 'X-CSRF-TOKEN' }))
-      .mockResolvedValueOnce(response(true, { message: 'Code sent' }))
-      .mockResolvedValueOnce(response(true, { token: 'csrf', headerName: 'X-CSRF-TOKEN' }))
+      .mockResolvedValueOnce(response(true, { status: 'OTP_REQUIRED', message: 'Code sent' }))
       .mockResolvedValueOnce(response(true, { id: 'mail-ananya@iitk.ac.in', name: 'Ananya', email: 'ananya@iitk.ac.in' }))
     vi.stubGlobal('fetch', fetchMock)
     renderLoginPage()
 
-    fireEvent.change(screen.getByLabelText(/iitk email address/i), { target: { value: 'ananya@iitk.ac.in' } })
-    fireEvent.click(screen.getByRole('button', { name: /email me a verification code/i }))
-    fireEvent.change(await screen.findByLabelText(/six-digit verification code/i), { target: { value: '123456' } })
+    fireEvent.change(screen.getByLabelText(/iitk member email address/i), { target: { value: 'ananya@iitk.ac.in' } })
+    fireEvent.click(screen.getByRole('button', { name: /continue to sign in/i }))
+    const codeField = await screen.findByLabelText(/6-digit verification code/i)
+    expect(localStorage.getItem('mrlbs_active_user_profile')).toBeNull()
+    fireEvent.change(codeField, { target: { value: '123456' } })
     fireEvent.click(screen.getByRole('button', { name: /verify and sign in/i }))
 
     await waitFor(() => expect(localStorage.getItem('mrlbs_active_user_profile')).toContain('ananya@iitk.ac.in'))
@@ -77,17 +75,16 @@ describe('institutional email sign-in', () => {
     )
   })
 
-  it('shows backend rejection when the email is outside the configured domain', async () => {
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce(response(false, {}))
-      .mockResolvedValueOnce(response(true, { token: 'csrf', headerName: 'X-CSRF-TOKEN' }))
-      .mockResolvedValueOnce(response(false, { message: 'Use an email address from the @iitk.ac.in domain.' })))
+  it('rejects an email outside the configured domain without requesting login', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(false, {}))
+    vi.stubGlobal('fetch', fetchMock)
     renderLoginPage()
 
-    fireEvent.change(screen.getByLabelText(/iitk email address/i), { target: { value: 'person@example.com' } })
-    fireEvent.click(screen.getByRole('button', { name: /email me a verification code/i }))
+    fireEvent.change(screen.getByLabelText(/iitk member email address/i), { target: { value: 'person@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: /continue to sign in/i }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('@iitk.ac.in domain')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Only @iitk.ac.in email addresses are accepted.')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(localStorage.getItem('mrlbs_active_user_profile')).toBeNull()
   })
 
@@ -98,6 +95,6 @@ describe('institutional email sign-in', () => {
     renderLoginPage()
 
     await waitFor(() => expect(localStorage.getItem('mrlbs_active_user_profile')).toBeNull())
-    expect(screen.getByRole('button', { name: /email me a verification code/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /continue to sign in/i })).toBeInTheDocument()
   })
 })

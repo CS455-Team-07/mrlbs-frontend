@@ -5,7 +5,7 @@ import { MemberDashboard } from './MemberDashboard'
 
 const resource = {
   id: '0d415dd5-d10e-4e7e-b809-75e84bddf5ed', name: 'Microscope 4', type: 'Microscope',
-  location: 'Science Block, Room 12', capacity: 8, available: true,
+  location: 'Science Block, Room 12', capacity: 8, available: true, bookingRule: { bookingPolicy: 'OPEN' },
 }
 const availability = {
   bookedSlots: [{ startTime: '2030-05-01T10:00:00', endTime: '2030-05-01T11:00:00' }],
@@ -20,8 +20,8 @@ async function searchAndChoose(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('Minimum capacity'), '4')
   await user.click(screen.getByRole('button', { name: 'Search resources' }))
   await screen.findByRole('heading', { name: 'Microscope 4' })
-  await user.click(screen.getByRole('button', { name: 'View availability' }))
-  await screen.findByRole('heading', { name: 'Microscope 4 availability' })
+  await user.click(screen.getByRole('button', { name: /Microscope 4/ }))
+  await screen.findByRole('heading', { name: 'Open slots' })
 }
 
 describe('member resource discovery and booking', () => {
@@ -30,20 +30,26 @@ describe('member resource discovery and booking', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => [resource] })
       .mockResolvedValueOnce({ ok: true, json: async () => availability })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'csrf', headerName: 'X-CSRF-TOKEN' }) })
+      .mockResolvedValue({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'b-1', creditCost: 4, status: 'DRAFT' }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'b-1', creditCost: 4, status: 'CONFIRMED' }) })
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
 
     render(<MemberDashboard />)
     await searchAndChoose(user)
-    expect(screen.getByText(/Existing bookings/)).toBeInTheDocument()
-    expect(screen.getByText(/2030-05-01 10:00 to 2030-05-01 11:00/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /11:00 to 2030-05-01 12:00.*use/i }))
-    expect(screen.getByLabelText('Start time')).toHaveValue('2030-05-01T11:00')
-    expect(screen.getByLabelText('End time')).toHaveValue('2030-05-01T12:00')
+    expect(screen.getByText(/Already booked/)).toBeInTheDocument()
+    expect(screen.getByText(/10:00 to 11:00/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^11:00 to 12:00$/ }))
+    expect(screen.getByLabelText('Start time')).toHaveValue('11:00')
+    expect(screen.getByLabelText('End time')).toHaveValue('12:00')
     await user.click(screen.getByRole('button', { name: 'Submit booking' }))
 
+    await screen.findByRole('heading', { name: 'Review & Confirm Booking' })
+    await user.click(screen.getByRole('button', { name: 'Confirm Booking' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Cost: 4 credits.')
+    expect(String(fetchMock.mock.calls[3][0])).toContain('/bookings/draft')
+    expect(String(fetchMock.mock.calls[4][0])).toContain('/bookings/b-1/confirm')
     const searchCall = fetchMock.mock.calls[0]
     expect(String(searchCall[0])).toContain('/resources/search?type=Microscope&date=2030-05-01&capacity=4')
     expect(String(fetchMock.mock.calls[1][0])).toContain(`/resources/${resource.id}/availability?date=2030-05-01`)
@@ -67,11 +73,11 @@ describe('member resource discovery and booking', () => {
 
     render(<MemberDashboard />)
     await searchAndChoose(user)
-    await user.type(screen.getByLabelText('Start time'), '2030-05-01T11:00')
-    await user.type(screen.getByLabelText('End time'), '2030-05-01T12:00')
+    await user.type(screen.getByLabelText('Start time'), '11:00')
+    await user.type(screen.getByLabelText('End time'), '12:00')
     await user.click(screen.getByRole('button', { name: 'Submit booking' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('not have enough credits')
+    expect(await screen.findByText(/not have enough credits/i)).toBeInTheDocument()
   })
 
   it('explains when a selected slot is taken by a concurrent booking', async () => {
@@ -85,11 +91,11 @@ describe('member resource discovery and booking', () => {
 
     render(<MemberDashboard />)
     await searchAndChoose(user)
-    await user.type(screen.getByLabelText('Start time'), '2030-05-01T11:00')
-    await user.type(screen.getByLabelText('End time'), '2030-05-01T12:00')
+    await user.type(screen.getByLabelText('Start time'), '11:00')
+    await user.type(screen.getByLabelText('End time'), '12:00')
     await user.click(screen.getByRole('button', { name: 'Submit booking' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('This slot is no longer available')
+    expect(await screen.findByText(/this slot is no longer available/i)).toBeInTheDocument()
   })
 
   it('loads the member booking history and updates a time window after a successful modification', async () => {
@@ -104,7 +110,7 @@ describe('member resource discovery and booking', () => {
 
     render(<MemberDashboard />)
     await user.click(screen.getByRole('button', { name: 'Refresh bookings' }))
-    await screen.findByText('2030-05-02 10:00 to 2030-05-02 11:00')
+    await screen.findByText(/10:00 - 11:00/)
     await user.click(screen.getByRole('button', { name: 'Change time' }))
     await user.clear(screen.getByLabelText('New start time'))
     await user.type(screen.getByLabelText('New start time'), '2030-05-02T12:00')
@@ -112,7 +118,7 @@ describe('member resource discovery and booking', () => {
     await user.type(screen.getByLabelText('New end time'), '2030-05-02T13:00')
     await user.click(screen.getByRole('button', { name: 'Save new time' }))
 
-    expect(await screen.findByText('2030-05-02 12:00 to 2030-05-02 13:00')).toBeInTheDocument()
+    expect(await screen.findByText(/12:00 - 13:00/)).toBeInTheDocument()
     expect(fetchMock.mock.calls[2][1]).toMatchObject({ method: 'PUT', credentials: 'include' })
     expect(String(fetchMock.mock.calls[2][0])).toContain('/bookings/booking-1/time-window')
     expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).toEqual({
@@ -131,7 +137,7 @@ describe('member resource discovery and booking', () => {
 
     render(<MemberDashboard />)
     await user.click(screen.getByRole('button', { name: 'Refresh bookings' }))
-    await screen.findByText('2030-05-02 10:00 to 2030-05-02 11:00')
+    await screen.findByText(/10:00 - 11:00/)
     await user.click(screen.getByRole('button', { name: 'Change time' }))
     await user.clear(screen.getByLabelText('New start time'))
     await user.type(screen.getByLabelText('New start time'), '2030-05-02T12:00')
@@ -139,8 +145,8 @@ describe('member resource discovery and booking', () => {
     await user.type(screen.getByLabelText('New end time'), '2030-05-02T13:00')
     await user.click(screen.getByRole('button', { name: 'Save new time' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Your original booking is unchanged')
-    expect(screen.getByText('2030-05-02 10:00 to 2030-05-02 11:00')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('This slot is no longer available.')
+    expect(screen.getByText(/10:00 - 11:00/)).toBeInTheDocument()
   })
 
   it('cancels an upcoming booking with CSRF protection and refreshes its status', async () => {
@@ -150,15 +156,17 @@ describe('member resource discovery and booking', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => [existing] })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'csrf', headerName: 'X-CSRF-TOKEN' }) })
       .mockResolvedValueOnce({ ok: true, json: async () => cancelled })
+      .mockResolvedValueOnce({ ok: true, json: async () => [cancelled] })
+      .mockResolvedValue({ ok: true, json: async () => [] })
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
 
     render(<MemberDashboard />)
     await user.click(screen.getByRole('button', { name: 'Refresh bookings' }))
-    await screen.findByText('2030-05-02 10:00 to 2030-05-02 11:00')
+    await screen.findByText(/10:00 - 11:00/)
     await user.click(screen.getByRole('button', { name: 'Cancel booking' }))
 
-    expect(await screen.findByText(/CANCELLED · 4 credits/)).toBeInTheDocument()
+    expect(await screen.findByText('CANCELLED')).toBeInTheDocument()
     expect(fetchMock.mock.calls[2][1]).toMatchObject({
       method: 'DELETE', credentials: 'include', headers: { 'X-CSRF-TOKEN': 'csrf' },
     })
@@ -177,10 +185,10 @@ describe('member resource discovery and booking', () => {
 
     render(<MemberDashboard />)
     await user.click(screen.getByRole('button', { name: 'Refresh bookings' }))
-    await screen.findByText('2030-05-02 10:00 to 2030-05-02 11:00')
+    await screen.findByText(/10:00 - 11:00/)
     await user.click(screen.getByRole('button', { name: 'Cancel booking' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('This booking can no longer be cancelled')
-    expect(screen.getByText(/CONFIRMED · 4 credits/)).toBeInTheDocument()
+    expect(screen.getByText('CONFIRMED')).toBeInTheDocument()
   })
 })

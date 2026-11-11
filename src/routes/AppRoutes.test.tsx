@@ -16,6 +16,6 @@ describe('application navigation and institutional authentication', () => {
     render(<MemoryRouter initialEntries={['/login']}><AppRoutes /></MemoryRouter>)
 
     expect(screen.getByRole('heading', { name: /sign in to mrlbs/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /email me a verification code/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /continue to sign in/i })).toBeInTheDocument()
   })
 })

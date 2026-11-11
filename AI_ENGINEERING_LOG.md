@@ -525,3 +525,79 @@ Admin resource onboarding now succeeds from the frontend form when logged in as 
 **Decision:** Accepted.
 
 **Reason:** The user requested conflict resolution on their branches.
+
+#### 2026-11-06 — Frontend verification and coverage
+
+**Task / Context**
+
+Collect verification evidence on a branch based on frontend `main` at `bce1818` and restore the failing workflow tests.
+
+**Prompt**
+
+The user requested test, coverage, security, concurrency, performance, and recovery reports, plus defects with fixes, GitHub issues, and a pull request.
+
+**AI Output**
+
+Ran Vitest and reproduced 13 failures out of 46 tests. Updated the login, routing, and booking tests for the current labels, API requests, and draft and confirmation flow. Added a V8 coverage command.
+
+**Student / Team Evaluation**
+
+Pending human review.
+
+**Errors / Risks / Hallucinations**
+
+The browser component tests use mocked HTTP. The time-window change test exercises the UI contract, and the backend baseline lacks the corresponding route. Lint reports three errors and three warnings in existing application code.
+
+**Changes Made After Evaluation**
+
+Adjusted the assertions and fixtures for current workflow behavior. All 46 tests passed with coverage, and the production build succeeded.
+
+**Final Artifact / Output**
+
+Updated workflow tests and coverage configuration, tracked in GitHub issue #27.
+
+**Decision**
+
+Pending human review.
+
+**Reason**
+
+The tests verify the workflows implemented by the current frontend and the coverage command reproduces the reported metrics.
+
+#### 2026-11-06 — BOOK-117, BOOK-118 and BOOK-119 frontend integration
+
+**Task / Context**
+
+Keep member and scoped admin workflows working with verified backend sessions and HTTPS production APIs.
+
+**Prompt**
+
+The user asked to implement the three Jira security tickets and test the running app and existing workflows.
+
+**AI Output**
+
+Unified frontend API URL handling, updated the sign-in text for verified sessions, sent a CSRF token on logout, and only updated inbox state when the server accepted the action.
+
+**Student / Team Evaluation**
+
+Pending human review.
+
+**Errors / Risks / Hallucinations**
+
+The live run used a local HTTPS server and a local STARTTLS mailbox. Hosted browser cookie and proxy behavior depends on deployment configuration.
+
+**Changes Made After Evaluation**
+
+Ran the built frontend in Chrome against the real HTTPS backend and PostgreSQL. Verified sign-in, booking, member history, the scoped approval UI, and logout. The production build succeeded and all 46 Vitest tests passed.
+
+**Final Artifact / Output**
+
+Frontend integration for the verified backend session and HTTPS deployment.
+
+**Decision**
+
+Pending human review.
+
+**Reason**
+
+All frontend calls now use the same production API policy and the browser workflows were exercised against the running stack.
