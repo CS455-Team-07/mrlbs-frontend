@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
+import { ADMIN_SCOPES } from '../config/adminConfig'
 import { useAuth } from '../hooks/useAuth'
 import { apiClientConfig, csrfFetch } from '../services/apiClient'
 import type { AuthenticatedIdentity } from '../services/userService'
@@ -91,7 +92,7 @@ export function LoginPage() {
         </h1>
         <p className="mb-6 mt-2 text-sm text-slate-600">
           {mode === 'login' ? 'Use your IIT Kanpur member or administrator account.' :
-            mode === 'request' ? 'We’ll email a one-time verification code to your IITK address.' :
+            mode === 'request' ? 'Members can request a one-time verification code at their IITK address.' :
               'Enter the code from your email and choose a password with at least 12 characters.'}
         </p>
 
@@ -106,6 +107,26 @@ export function LoginPage() {
                 placeholder="username@iitk.ac.in" readOnly={mode === 'reset'}
                 value={email} onChange={(event) => setEmail(event.target.value)} />
             </label>
+            {mode === 'login' && (
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Choose an administrator account">
+                {ADMIN_SCOPES.map((admin) => (
+                  <button
+                    key={admin.email}
+                    type="button"
+                    aria-pressed={email === admin.email}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-50 aria-pressed:border-blue-600 aria-pressed:bg-blue-50"
+                    onClick={() => {
+                      setEmail(admin.email)
+                      setPassword('')
+                      setError('')
+                      setNotice('')
+                    }}
+                  >
+                    {admin.name}
+                  </button>
+                ))}
+              </div>
+            )}
             {mode === 'reset' && (
               <label className="block text-sm font-medium text-slate-700">
                 Verification code
@@ -140,7 +161,7 @@ export function LoginPage() {
         <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2">
           {mode === 'login' ? (
             <button className={linkClass} type="button" disabled={busy} onClick={() => changeMode('request')}>
-              Forgot password or first-time sign-in?
+              Member forgot password or first-time sign-in?
             </button>
           ) : (
             <>

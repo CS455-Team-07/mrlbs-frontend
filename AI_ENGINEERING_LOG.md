@@ -609,3 +609,11 @@ All frontend calls now use the same production API policy and the browser workfl
 - **Verification and changes** — Updated the login and routing tests. The production build and all 14 focused tests passed. The full frontend suite passed 43 of 45 tests. Two booking-reschedule tests expect a Change time button absent from the existing dashboard.
 - **Final artifact** — Updated authentication screens, profile restoration, session-backed API calls, documentation, and tests.
 - **Team evaluation and decision** — Pending human review. No acceptance decision recorded.
+
+#### 2026-11-11 — Make local admin sign-in addresses selectable
+
+- **Prompt** — The user reported that local sign-in for `lhc@iitk.ac.in` and other admin accounts displayed an IITK email prompt.
+- **Implementation** — Added sign-in buttons that fill the configured IITK address for each scoped admin. Clarified that first-time setup and OTP recovery apply to members.
+- **Verification** — All eight focused frontend tests and the production build passed. The running local backend accepted the configured passwords for all three admins and returned the expected resource scopes from their authenticated sessions.
+- **Final artifact** — Updated login form and frontend regression tests.
+- **Team evaluation and decision** — Pending human review.
