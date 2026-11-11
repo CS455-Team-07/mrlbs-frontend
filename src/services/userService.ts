@@ -8,6 +8,7 @@ export interface AuthenticatedIdentity {
   email: string
   name?: string
   id?: string
+  role?: UserRole
 }
 
 /**
@@ -61,16 +62,8 @@ function saveUserRegistry(
 }
 
 /**
- * On the user's first successful login, creates a user profile
- * containing the institutional email address and assigned role.
- *
- * The Admin role is assigned when the email exists in the
- * authorized administrator configuration. Otherwise, the
- * Member role is assigned.
- *
- * If a profile already exists for the same institutional email,
- * the existing profile is returned so that the originally
- * assigned role is preserved for subsequent RBAC enforcement.
+ * Caches profile details for the signed-in identity.
+ * A role and ID supplied by the backend supersede the cached values.
  */
 export function handleUserAuthentication(
   identity: AuthenticatedIdentity,
@@ -79,26 +72,24 @@ export function handleUserAuthentication(
 
   const registry = getUserRegistry()
 
-  // Subsequent login:
-  // return the already stored profile and preserve its role.
   if (registry[normalizedEmail]) {
-    const existingProfile = registry[normalizedEmail]
+    const existingProfile = {
+      ...registry[normalizedEmail],
+      id: identity.id ?? registry[normalizedEmail].id,
+      role: identity.role ?? registry[normalizedEmail].role,
+    }
+    registry[normalizedEmail] = existingProfile
+    saveUserRegistry(registry)
 
     setActiveUserProfile(existingProfile)
 
     return existingProfile
   }
 
-  // First login:
-  // determine the user's role from the authorized
-  // administrator configuration.
-  const assignedRole: UserRole = isAuthorizedAdmin(normalizedEmail)
+  const assignedRole: UserRole = identity.role ?? (isAuthorizedAdmin(normalizedEmail)
     ? 'admin'
-    : 'member'
+    : 'member')
 
-  // Use the supplied name when available.
-  // Since authentication is currently email-based,
-  // fall back to the part before @iitk.ac.in.
   const profileName =
     identity.name?.trim() ||
     normalizedEmail.split('@')[0]

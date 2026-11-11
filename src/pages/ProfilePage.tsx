@@ -7,7 +7,7 @@ import {
 } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { apiClientConfig, csrfFetch } from '../services/apiClient'
+import { apiClientConfig } from '../services/apiClient'
 
 export function ProfilePage() {
   const { user, updateProfile } = useAuth()
@@ -33,16 +33,11 @@ export function ProfilePage() {
   useEffect(() => {
     if (user?.role === 'member' && user?.email) {
       setLoadingCredits(true)
-      csrfFetch(`${apiClientConfig.baseUrl}/auth/member-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user.email, name: user.name }),
-        credentials: 'include',
-      })
-        .then((res) => res.json())
+      fetch(`${apiClientConfig.baseUrl}/auth/member-credits`, { credentials: 'include' })
+        .then((res) => res.ok ? res.json() : null)
         .then((data) => {
-          if (data?.credits != null) {
-            setCurrentBalance(Number(data.credits))
+          if (data?.creditBalance != null) {
+            setCurrentBalance(Number(data.creditBalance))
           }
         })
         .catch((err) => console.error('Failed to load credit balance', err))

@@ -50,7 +50,7 @@ Copy `.env.example` to `.env` and set the Vite environment variables needed for 
 VITE_API_BASE_URL=http://localhost:8080/api
 ```
 
-Institutional email one-time-code sign-in is enabled by default. The backend must run with `AUTH_ENABLED=true` and configured SMTP delivery. Only `@iitk.ac.in` addresses are accepted, and the frontend verifies the server session before restoring a cached profile. `VITE_API_BASE_URL` configures API calls to the backend.
+Members and administrators sign in with an IITK email and password. Choose **Forgot password or first-time sign-in?** to set or reset a password using a code sent by the backend. The backend needs SMTP configuration to send the code. The frontend verifies the server session before restoring a cached profile. Set `VITE_API_BASE_URL` to point to the backend.
 
 ## Current status
 

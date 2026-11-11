@@ -601,3 +601,11 @@ Pending human review.
 **Reason**
 
 All frontend calls now use the same production API policy and the browser workflows were exercised against the running stack.
+
+#### 2026-11-11 — Password sign-in and recovery screens
+
+- **Prompt** — The user asked for member and admin passwords, OTP password recovery, and a running backend, then requested “ok fix it” after the security assessment.
+- **Implementation** — Replaced the email-only sign-in with a password form and emailed-code setup and reset. The frontend uses the server-issued role and session, and member credit and booking calls use the authenticated session.
+- **Verification and changes** — Updated the login and routing tests. The production build and all 14 focused tests passed. The full frontend suite passed 43 of 45 tests. Two booking-reschedule tests expect a Change time button absent from the existing dashboard.
+- **Final artifact** — Updated authentication screens, profile restoration, session-backed API calls, documentation, and tests.
+- **Team evaluation and decision** — Pending human review. No acceptance decision recorded.
