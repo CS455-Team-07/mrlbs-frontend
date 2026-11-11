@@ -23,6 +23,7 @@ function renderLoginPage() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/member" element={<h1>Member dashboard</h1>} />
+          <Route path="/admin" element={<h1>Admin dashboard</h1>} />
         </Routes>
       </MemoryRouter>
     </AuthProvider>,
@@ -54,6 +55,30 @@ describe('institutional password sign-in', () => {
     expect(fetchMock).toHaveBeenLastCalledWith(
       expect.stringMatching(/\/auth\/login$/),
       expect.objectContaining({ method: 'POST', credentials: 'include', body: JSON.stringify({ email, password }) }),
+    )
+  })
+
+  it.each([
+    ['LHC Admin', 'lhc@iitk.ac.in'],
+    ['GPU Admin', 'gpus@iitk.ac.in'],
+    ['KD Lab Admin', 'kdlab@iitk.ac.in'],
+  ])('fills the canonical address for %s and signs in with a password', async (name, adminEmail) => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response(401))
+      .mockResolvedValueOnce(response(200, { token: 'csrf-token', headerName: 'X-CSRF-TOKEN' }))
+      .mockResolvedValueOnce(response(200, { id: 'admin-id', name, email: adminEmail, role: 'admin' }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderLoginPage()
+
+    fireEvent.click(screen.getByRole('button', { name }))
+    expect(screen.getByLabelText('IITK email address')).toHaveValue(adminEmail)
+    enter('Password', password)
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByRole('heading', { name: 'Admin dashboard' })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringMatching(/\/auth\/login$/),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: adminEmail, password }) }),
     )
   })
 
