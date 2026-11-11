@@ -247,4 +247,33 @@ describe('Admin Approval and Rejection Workflow', () => {
       expect(body.reason).toBe('Maintenance scheduled during this period.')
     })
   })
+
+  it('renders "Manual review only (AI offline)" when AI review is in rule-based fallback', async () => {
+    const fallbackRequest = {
+      ...mockRequest,
+      id: 'b-fallback',
+      aiReview: {
+        status: 'COMPLETED',
+        modelName: 'RULE_BASED_FALLBACK',
+        recommendation: 'NEEDS_HUMAN_REVIEW',
+        confidenceScore: 0.75,
+      },
+    }
+
+    const fetchMock = vi.fn((url: string) => {
+      const urlStr = String(url)
+      if (urlStr.includes('/resources/inactive') || urlStr.includes('/resources')) {
+        return Promise.resolve({ ok: true, json: async () => [] })
+      }
+      if (urlStr.includes('/bookings/approvals')) {
+        return Promise.resolve({ ok: true, json: async () => [fallbackRequest] })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderAdminDashboard()
+
+    expect(await screen.findByText(/Manual review only \(AI offline\)/)).toBeInTheDocument()
+  })
 })
