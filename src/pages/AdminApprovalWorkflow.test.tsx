@@ -248,7 +248,33 @@ describe('Admin Approval and Rejection Workflow', () => {
     })
   })
 
-  it('renders "Manual review only (AI offline)" when AI review is in rule-based fallback', async () => {
+  it('renders "Manual review only (AI offline)" when AI review status is FALLBACK_HUMAN_ONLY', async () => {
+    const offlineRequest = {
+      ...mockRequest,
+      id: 'b-offline',
+      aiReview: {
+        status: 'FALLBACK_HUMAN_ONLY',
+      },
+    }
+
+    const fetchMock = vi.fn((url: string) => {
+      const urlStr = String(url)
+      if (urlStr.includes('/resources/inactive') || urlStr.includes('/resources')) {
+        return Promise.resolve({ ok: true, json: async () => [] })
+      }
+      if (urlStr.includes('/bookings/approvals')) {
+        return Promise.resolve({ ok: true, json: async () => [offlineRequest] })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderAdminDashboard()
+
+    expect(await screen.findByText(/Manual review only \(AI offline\)/)).toBeInTheDocument()
+  })
+
+  it('renders "AI: Needs Human Review (75% confidence)" with rationale and "View evidence" when Gemini is unconfigured (RULE_BASED_FALLBACK)', async () => {
     const fallbackRequest = {
       ...mockRequest,
       id: 'b-fallback',
@@ -257,6 +283,9 @@ describe('Admin Approval and Rejection Workflow', () => {
         modelName: 'RULE_BASED_FALLBACK',
         recommendation: 'NEEDS_HUMAN_REVIEW',
         confidenceScore: 0.75,
+        rationale: 'Requester has no prior completed reservations on this resource to evaluate historical usage patterns. Admin review advised.',
+        supportingEvidence: 'Prior bookings total: 0 (Completed: 0, Cancelled: 0, Rejected: 0, Pending: 0)',
+        dataLimitations: 'Attribution limitations',
       },
     }
 
@@ -274,6 +303,9 @@ describe('Admin Approval and Rejection Workflow', () => {
 
     renderAdminDashboard()
 
-    expect(await screen.findByText(/Manual review only \(AI offline\)/)).toBeInTheDocument()
+    expect(await screen.findByText(/Needs Human Review/)).toBeInTheDocument()
+    expect(screen.getByText(/\(75% confidence\)/)).toBeInTheDocument()
+    expect(screen.getByText(/Requester has no prior completed reservations on this resource to evaluate historical usage patterns/)).toBeInTheDocument()
+    expect(screen.getByText('View evidence')).toBeInTheDocument()
   })
 })
