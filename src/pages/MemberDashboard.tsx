@@ -311,7 +311,7 @@ export function MemberDashboard() {
     if (targetType.trim()) params.set('type', targetType.trim())
     if (targetDate) params.set('date', targetDate)
 
-    const effectiveDate = targetDate || ((targetStart || targetEnd) ? new Date().toISOString().split('T')[0] : '')
+    const effectiveDate = targetDate || ((targetStart || targetEnd) ? todayDateString : '')
     if (effectiveDate && targetStart) {
       params.set('startTime', `${effectiveDate}T${targetStart}`)
     }
@@ -1669,7 +1669,7 @@ export function MemberDashboard() {
       <AiAssistantDrawer
         isOpen={showAiAssistant}
         onClose={() => setShowAiAssistant(false)}
-        currentDate={date}
+        currentDate={date || todayDateString}
         onSelectRecommendation={handleSelectRecommendation}
       />
 

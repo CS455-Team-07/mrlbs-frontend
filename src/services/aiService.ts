@@ -51,6 +51,14 @@ export async function getAiStatus(): Promise<{ enabled: boolean; geminiConfigure
   return response.json()
 }
 
+export function getLocalTodayDateString(): string {
+  const d = new Date()
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export async function askAiAssistant(
   prompt: string,
   contextDate?: string,
@@ -65,7 +73,7 @@ export async function askAiAssistant(
     headers,
     body: JSON.stringify({
       prompt,
-      contextDate: contextDate || new Date().toISOString().split('T')[0],
+      contextDate: contextDate || getLocalTodayDateString(),
       previousIntent: previousIntent || null,
     }),
   })
