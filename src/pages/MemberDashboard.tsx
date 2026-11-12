@@ -171,6 +171,14 @@ export function MemberDashboard() {
   const [nowTimestamp, setNowTimestamp] = useState(Date.now())
 
   const handleSelectRecommendation = async (rec: ResourceRecommendation) => {
+    // Invalidate any in-flight background searches and cancel any pending search debounce
+    searchRequestIdRef.current++
+    skipAutoSearchRef.current = true
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current)
+      searchDebounceRef.current = null
+    }
+
     const chosenDate = rec.date || date
     if (rec.type) setType(rec.type)
     if (rec.date) setDate(rec.date)
@@ -205,7 +213,7 @@ export function MemberDashboard() {
       return exists ? prev : [targetOpt, ...prev]
     })
 
-    await chooseResource(targetOpt, chosenDate, formattedStart, formattedEnd)
+    await chooseResource(targetOpt, chosenDate, formattedStart, formattedEnd, true)
   }
 
   const isClashing = Boolean(
@@ -295,6 +303,8 @@ export function MemberDashboard() {
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchCacheRef = useRef<Map<string, { data: ResourceOption[]; timestamp: number }>>(new Map())
   const isInitialMount = useRef(true)
+  const skipAutoSearchRef = useRef(false)
+  const searchRequestIdRef = useRef(0)
 
   const performSearch = useCallback(async (
     targetType = type,
@@ -307,6 +317,7 @@ export function MemberDashboard() {
       clearTimeout(searchDebounceRef.current)
       searchDebounceRef.current = null
     }
+    const currentRequestId = ++searchRequestIdRef.current
     const params = new URLSearchParams()
     if (targetType.trim()) params.set('type', targetType.trim())
     if (targetDate) params.set('date', targetDate)
@@ -325,8 +336,10 @@ export function MemberDashboard() {
     const isFresh = cached && (Date.now() - cached.timestamp < 30000)
 
     if (isFresh) {
-      setResources(cached.data)
-      setError('')
+      if (currentRequestId === searchRequestIdRef.current) {
+        setResources(cached.data)
+        setError('')
+      }
       return
     }
 
@@ -339,11 +352,18 @@ export function MemberDashboard() {
       const response = await fetch(`${apiClientConfig.baseUrl}/resources/search?${params}`, { credentials: 'include' })
       if (!response.ok) throw new Error('Resources could not be loaded.')
       const results = (await response.json()) as ResourceOption[]
+      if (currentRequestId !== searchRequestIdRef.current) return
       searchCacheRef.current.set(cacheKey, { data: results, timestamp: Date.now() })
       setResources(results)
     } catch (searchError) {
-      setError(searchError instanceof Error ? searchError.message : 'Resources could not be loaded.')
-    } finally { setLoading(false) }
+      if (currentRequestId === searchRequestIdRef.current) {
+        setError(searchError instanceof Error ? searchError.message : 'Resources could not be loaded.')
+      }
+    } finally {
+      if (currentRequestId === searchRequestIdRef.current) {
+        setLoading(false)
+      }
+    }
   }, [type, date, searchStartTime, searchEndTime, capacity])
 
   async function searchResources(event: FormEvent<HTMLFormElement>) {
@@ -359,6 +379,11 @@ export function MemberDashboard() {
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false
+      return
+    }
+
+    if (skipAutoSearchRef.current) {
+      skipAutoSearchRef.current = false
       return
     }
 
@@ -382,13 +407,18 @@ export function MemberDashboard() {
     resource: ResourceOption,
     targetDate?: string,
     targetStart?: string,
-    targetEnd?: string
+    targetEnd?: string,
+    forceSelect: boolean = false
   ) {
-    if (selectedResource?.id === resource.id) {
+    if (!forceSelect && selectedResource?.id === resource.id) {
       setSelectedResource(null)
       setAvailability(null)
       setBooking(null)
       return
+    }
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current)
+      searchDebounceRef.current = null
     }
     const effectiveDate = targetDate || date || todayDateString
     const effectiveStart = targetStart !== undefined ? targetStart : (searchStartTime || '')
