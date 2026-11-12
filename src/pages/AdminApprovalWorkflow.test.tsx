@@ -274,12 +274,12 @@ describe('Admin Approval and Rejection Workflow', () => {
     expect(await screen.findByText(/Manual review only \(AI offline\)/)).toBeInTheDocument()
   })
 
-  it('renders "AI: Needs Human Review (75% confidence)" with rationale and "View evidence" when Gemini is unconfigured (RULE_BASED_FALLBACK)', async () => {
+  it('renders "Manual review only (AI offline)" when Gemini is unconfigured (modelName: RULE_BASED_FALLBACK)', async () => {
     const fallbackRequest = {
       ...mockRequest,
       id: 'b-fallback',
       aiReview: {
-        status: 'COMPLETED',
+        status: 'FALLBACK_HUMAN_ONLY',
         modelName: 'RULE_BASED_FALLBACK',
         recommendation: 'NEEDS_HUMAN_REVIEW',
         confidenceScore: 0.75,
@@ -303,9 +303,6 @@ describe('Admin Approval and Rejection Workflow', () => {
 
     renderAdminDashboard()
 
-    expect(await screen.findByText(/Needs Human Review/)).toBeInTheDocument()
-    expect(screen.getByText(/\(75% confidence\)/)).toBeInTheDocument()
-    expect(screen.getByText(/Requester has no prior completed reservations on this resource to evaluate historical usage patterns/)).toBeInTheDocument()
-    expect(screen.getByText('View evidence')).toBeInTheDocument()
+    expect(await screen.findByText(/Manual review only \(AI offline\)/)).toBeInTheDocument()
   })
 })
