@@ -731,9 +731,43 @@ export function MemberDashboard() {
     }
   }
 
+  function parseOfferExpiry(expiresAtStr: string): { secondsLeft: number; targetDate: Date } {
+    if (!expiresAtStr) return { secondsLeft: 0, targetDate: new Date(0) }
+    const now = nowTimestamp || Date.now()
+
+    // If it already has an explicit timezone (e.g. ends with Z or has offset like +05:30)
+    if (expiresAtStr.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(expiresAtStr)) {
+      const d = new Date(expiresAtStr)
+      const diff = Math.floor((d.getTime() - now) / 1000)
+      return { secondsLeft: Math.max(0, diff), targetDate: d }
+    }
+
+    // Bare LocalDateTime without timezone:
+    // Evaluate both UTC and Local interpretation
+    const localDate = new Date(expiresAtStr)
+    const utcDate = new Date(`${expiresAtStr}Z`)
+
+    const diffLocal = Math.floor((localDate.getTime() - now) / 1000)
+    const diffUtc = Math.floor((utcDate.getTime() - now) / 1000)
+
+    // Select the interpretation closest to current time (handles both Render UTC and Localhost IST)
+    const isLocalCloser = Math.abs(diffLocal) < Math.abs(diffUtc)
+    const targetDate = isLocalCloser ? localDate : utcDate
+    const diff = isLocalCloser ? diffLocal : diffUtc
+
+    return { secondsLeft: Math.max(0, diff), targetDate }
+  }
+
   function getOfferRemainingSeconds(expiresAtStr: string) {
-    const expiresAt = new Date(expiresAtStr).getTime()
-    return Math.max(0, Math.floor((expiresAt - nowTimestamp) / 1000))
+    return parseOfferExpiry(expiresAtStr).secondsLeft
+  }
+
+  function formatOfferExpiryTime(expiresAtStr: string) {
+    if (!expiresAtStr) return ''
+    const { targetDate } = parseOfferExpiry(expiresAtStr)
+    return !isNaN(targetDate.getTime())
+      ? targetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      : expiresAtStr
   }
 
   function formatCountdown(seconds: number) {
@@ -1417,7 +1451,7 @@ export function MemberDashboard() {
                         ⏳ {isExpired ? 'Offer Expired' : `Expires in: ${formatCountdown(secondsLeft)}`}
                       </span>
                       <span className="text-slate-400">
-                        Expires at: {offer.expiresAt.replace('T', ' ').slice(11, 19)}
+                        Expires at: {formatOfferExpiryTime(offer.expiresAt)}
                       </span>
                     </div>
                   </div>
