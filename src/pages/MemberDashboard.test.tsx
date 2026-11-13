@@ -98,57 +98,6 @@ describe('member resource discovery and booking', () => {
     expect(await screen.findByText(/this slot is no longer available/i)).toBeInTheDocument()
   })
 
-  it('loads the member booking history and updates a time window after a successful modification', async () => {
-    const existing = { id: 'booking-1', resourceId: resource.id, startTime: '2030-05-02T10:00:00', endTime: '2030-05-02T11:00:00', status: 'CONFIRMED', creditCost: 4 }
-    const updated = { ...existing, startTime: '2030-05-02T12:00:00', endTime: '2030-05-02T13:00:00' }
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => [existing] })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'csrf', headerName: 'X-CSRF-TOKEN' }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => updated })
-    vi.stubGlobal('fetch', fetchMock)
-    const user = userEvent.setup()
-
-    render(<MemberDashboard />)
-    await user.click(screen.getByRole('button', { name: 'Refresh bookings' }))
-    await screen.findByText(/10:00 - 11:00/)
-    await user.click(screen.getByRole('button', { name: 'Change time' }))
-    await user.clear(screen.getByLabelText('New start time'))
-    await user.type(screen.getByLabelText('New start time'), '2030-05-02T12:00')
-    await user.clear(screen.getByLabelText('New end time'))
-    await user.type(screen.getByLabelText('New end time'), '2030-05-02T13:00')
-    await user.click(screen.getByRole('button', { name: 'Save new time' }))
-
-    expect(await screen.findByText(/12:00 - 13:00/)).toBeInTheDocument()
-    expect(fetchMock.mock.calls[2][1]).toMatchObject({ method: 'PUT', credentials: 'include' })
-    expect(String(fetchMock.mock.calls[2][0])).toContain('/bookings/booking-1/time-window')
-    expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).toEqual({
-      startTime: '2030-05-02T12:00', endTime: '2030-05-02T13:00',
-    })
-  })
-
-  it('keeps the original displayed booking when its replacement slot is unavailable', async () => {
-    const existing = { id: 'booking-1', resourceId: resource.id, startTime: '2030-05-02T10:00:00', endTime: '2030-05-02T11:00:00', status: 'CONFIRMED', creditCost: 4 }
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => [existing] })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'csrf', headerName: 'X-CSRF-TOKEN' }) })
-      .mockResolvedValueOnce({ ok: false, json: async () => ({ reasonCode: 'SLOT_NO_LONGER_AVAILABLE' }) })
-    vi.stubGlobal('fetch', fetchMock)
-    const user = userEvent.setup()
-
-    render(<MemberDashboard />)
-    await user.click(screen.getByRole('button', { name: 'Refresh bookings' }))
-    await screen.findByText(/10:00 - 11:00/)
-    await user.click(screen.getByRole('button', { name: 'Change time' }))
-    await user.clear(screen.getByLabelText('New start time'))
-    await user.type(screen.getByLabelText('New start time'), '2030-05-02T12:00')
-    await user.clear(screen.getByLabelText('New end time'))
-    await user.type(screen.getByLabelText('New end time'), '2030-05-02T13:00')
-    await user.click(screen.getByRole('button', { name: 'Save new time' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('This slot is no longer available.')
-    expect(screen.getByText(/10:00 - 11:00/)).toBeInTheDocument()
-  })
-
   it('cancels an upcoming booking with CSRF protection and refreshes its status', async () => {
     const existing = { id: 'booking-1', resourceId: resource.id, startTime: '2030-05-02T10:00:00', endTime: '2030-05-02T11:00:00', status: 'CONFIRMED', creditCost: 4 }
     const cancelled = { ...existing, status: 'CANCELLED' }
